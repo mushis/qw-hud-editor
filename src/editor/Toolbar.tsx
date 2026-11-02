@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import logo from '../assets/brand/logo-64.png'
 import type { ViewMode } from '../hud/catalog'
-import { clearTextures, useTextures } from '../render/textures'
+import { removeTextureSet, useTextures } from '../render/textures'
 import { useStore, virtualSize } from '../store'
 import { fetchSharedCfg, galleryEnabled, openedFromSignInLink, useGallery } from '../gallery/api'
 import { MyHuds } from '../gallery/MyHuds'
@@ -42,7 +42,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const canRedo = useStore((s) => s.future.length > 0)
   const { setSettings, setPreview, undo, redo } = useStore.getState()
   const gallery = useGallery()
-  const textureCount = useTextures((s) => Object.keys(s.textures).length)
+  const textureSets = useTextures((s) => s.sets)
   const cfgInput = useRef<HTMLInputElement>(null)
   const bgInput = useRef<HTMLInputElement>(null)
   const texInput = useRef<HTMLInputElement>(null)
@@ -260,21 +260,24 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
           onChange={(e) => {
             const files = [...(e.target.files ?? [])]
             e.target.value = ''
-            if (files.length) loadTextureFiles(files).then(onMessage)
+            if (files.length) loadTextureFiles(files.map((file) => ({ path: file.name, file }))).then(onMessage)
           }}
         />
-        {textureCount > 0 && (
+        {textureSets.map((set) => (
           <button
-            title="Remove all custom textures and go back to the nQuake ones"
+            key={set.id}
+            className="texture-set"
+            title={`Textures from ${set.label}: ${set.names.join(', ')}.
+Click to remove this set (anything it replaced shows again).`}
             onClick={() => {
-              if (!window.confirm(`Remove all ${textureCount} custom textures?`)) return
-              clearTextures()
-              onMessage('Custom textures removed.')
+              if (!window.confirm(`Remove the ${set.names.length} textures from "${set.label}"?`)) return
+              removeTextureSet(set.id)
+              onMessage(`Removed the textures from "${set.label}".`)
             }}
           >
-            {textureCount} custom ✕
+            {set.names.length} custom · <span>{set.label}</span> ✕
           </button>
-        )}
+        ))}
       </div>
 
       <div className="group end">

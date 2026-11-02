@@ -9,7 +9,7 @@ import { Palette } from './editor/Palette'
 import { Stage } from './editor/Stage'
 import { Toolbar } from './editor/Toolbar'
 import { useGallery } from './gallery/api'
-import { isTextureFile, loadSavedTextures } from './render/textures'
+import { droppedFiles, isTextureFile, loadSavedTextures } from './render/textures'
 import { hasSavedDoc, useStore } from './store'
 
 function useKeyboard() {
@@ -67,13 +67,14 @@ function useFileDrop(onMessage: (m: string) => void) {
       e.preventDefault()
       depth = 0
       setDragging(false)
-      const files = [...(e.dataTransfer?.files ?? [])]
-      const cfg = files.find((f) => /.(cfg|txt)$/i.test(f.name))
-      const textures = files.filter((f) => isTextureFile(f.name))
+      // Folders are walked; a cfg only counts when dropped on its own, not from inside a folder.
+      const files = await droppedFiles(e.dataTransfer!)
+      const cfg = files.find((f) => !f.path.includes('/') && /\.(cfg|txt)$/i.test(f.path))
+      const textures = files.filter((f) => isTextureFile(f.path))
       const messages: string[] = []
-      if (cfg) messages.push(importCfg(cfg.name, await readFileText(cfg)))
+      if (cfg) messages.push(importCfg(cfg.file.name, await readFileText(cfg.file)))
       if (textures.length) messages.push(await loadTextureFiles(textures))
-      if (!cfg && !textures.length) messages.push('Drop a .cfg file to import it, or textures (.png .tga .wad .zip .pk3).')
+      if (!cfg && !textures.length) messages.push('Drop a .cfg file to import it, or textures (.png .tga .wad .zip .pk3, or a folder of them).')
       onMessage(messages.join(' '))
     }
     window.addEventListener('dragenter', enter)

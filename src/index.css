@@ -1051,3 +1051,13 @@ button.primary:disabled {
 .recover-form input {
   flex: 1;
 }
+
+.texture-set span {
+  display: inline-block;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: var(--dim);
+}

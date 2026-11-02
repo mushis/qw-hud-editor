@@ -1,7 +1,7 @@
 // Loading and saving whole HUDs. Every way in (import, presets, saved HUDs, drag and drop) goes through importCfg.
 import { emptyDoc, parseCfg, serializeCfg, type ClientSettings } from '../hud/cfg'
 import { EZQUAKE_DEFAULTS } from '../hud/defaults'
-import { importTextures } from '../render/textures'
+import { importTextures, type PathFile } from '../render/textures'
 import { useStore } from '../store'
 
 const CLIENT_LABELS: Record<keyof ClientSettings, string> = {
@@ -33,13 +33,18 @@ export function importCfg(name: string, text: string): string {
   return `Loaded ${name}: ${notes.join('; ')}.`
 }
 
-// Loads texture files (images, gfx.wad, zip/pk3) and returns a summary.
-export async function loadTextureFiles(files: File[]): Promise<string> {
+// Loads texture files (images, gfx.wad, zip/pk3, folders of them) and returns a summary.
+export async function loadTextureFiles(files: PathFile[]): Promise<string> {
+  const list = (items: string[]) => `${items.slice(0, 5).join(', ')}${items.length > 5 ? '…' : ''}`
+  // The set is named after what was dropped or picked: a folder, a file, or "first +N".
+  const tops = [...new Set(files.map((f) => f.path.split('/')[0]))]
+  const label = tops.length === 1 ? tops[0] : `${tops[0]} +${tops.length - 1}`
   try {
-    const names = await importTextures(files)
-    return names.length
-      ? `Loaded ${names.length} textures (${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}). They are kept in this browser.`
+    const { names, skipped } = await importTextures(files, label)
+    const loaded = names.length
+      ? `Loaded ${names.length} textures (${list(names)}). They are kept in this browser.`
       : 'No HUD textures found in those files.'
+    return skipped.length ? `${loaded} Couldn't read ${skipped.length} files (${list(skipped)}).` : loaded
   } catch (e) {
     return `Couldn't read textures: ${(e as Error).message}`
   }

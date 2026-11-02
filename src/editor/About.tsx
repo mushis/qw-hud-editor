@@ -45,9 +45,12 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
           with <code>exec &lt;file&gt;</code>.
         </li>
         <li>
-          <b>Textures</b>: drop images (<code>num_0.png</code>, <code>sb_shells.tga</code>…), a <code>gfx.wad</code>, or a zip/pk3 to
-          replace the HUD pictures by name, add group pictures (<code>gfx/&lt;name&gt;</code>) or a charset. They are kept in this browser;{' '}
-          <i>N custom ✕</i> removes them.
+          <b>Textures</b>: drop images (<code>num_0.png</code>, <code>sb_shells.tga</code>…), a <code>gfx.wad</code>, a zip/pk3, or a
+          whole folder (such as <code>qw/textures/wad</code>) to replace the HUD pictures by name, add group pictures (
+          <code>gfx/&lt;name&gt;</code>) or a charset. When a name exists more than once, the file ezQuake would load wins (
+          <code>textures/wad</code> before <code>gfx</code>; <code>.tga</code>, then <code>.png</code>, then <code>.jpg</code>). Each load
+          gets its own <i>N custom · name ✕</i> button that removes just that set; newer sets cover older ones. They are kept in this
+          browser.
         </li>
         <li>Your work is saved in this browser automatically, so it is still there after a reload.</li>
       </ul>

@@ -6,6 +6,7 @@ import { parseCfg, serializeCfg, splitCvar } from './cfg'
 import { EZQUAKE_DEFAULTS, withDefaults } from './defaults'
 import { IMPLS, implFor } from './elements'
 import { decodeTga, decodeWad } from '../render/decode'
+import { texturePriority } from '../render/textures'
 import { findIssues } from './issues'
 import { frameExtents, layoutHud, sbLinesForViewsize, shouldShow, wouldCycle } from './layout'
 import { DEFAULT_PREVIEW } from './preview'
@@ -211,5 +212,19 @@ describe('texture decoding', () => {
     const [lump] = decodeWad(new Uint8Array([...head, ...pic, ...entry]))
     expect(lump.name).toBe('num_0')
     expect([...lump.image.data]).toEqual([0, 0, 0, 255, ...lump.image.data.slice(4, 7), 0])
+  })
+})
+
+describe('texture priority', () => {
+  it('prefers what ezQuake loads: textures/wad before gfx, then tga, png, jpg', () => {
+    const order = ['gfx/num_0.tga', 'num_0.png', 'textures/wad/num_0.png', 'textures/wad/num_0.tga', 'num_0.jpg', 'gfx/num_0.png']
+    expect([...order].sort((a, b) => texturePriority(a) - texturePriority(b))).toEqual([
+      'textures/wad/num_0.tga',
+      'textures/wad/num_0.png',
+      'gfx/num_0.tga',
+      'gfx/num_0.png',
+      'num_0.png',
+      'num_0.jpg',
+    ])
   })
 })
