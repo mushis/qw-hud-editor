@@ -10,6 +10,8 @@ import { readFileText } from './io'
 // A folder read lazily: only the subfolders looked into are listed (a Quake folder can hold thousands of files).
 export interface Folder {
   entries(): Promise<Map<string, Entry>> // keyed by key(name): Windows names ignore case
+  // Opens a name directly, for one the listing left out (the folder picker's listing can miss files).
+  open?(name: string): Promise<Entry | null>
 }
 type Entry = { name: string; file: () => Promise<File> } | { name: string; folder: Folder }
 
@@ -21,15 +23,38 @@ const cached = (list: () => Promise<Entry[]>): Folder => {
   return { entries: () => (entries ??= list().then((all) => new Map(all.map((e) => [key(e.name), e])))) }
 }
 
+// Why direct opens failed, for the error message.
+const openErrors: string[] = []
+
+const fileEntry = (h: FileSystemFileHandle): Entry => ({ name: h.name, file: () => h.getFile() })
+
 // From the folder picker (Chrome, Edge, Opera).
 export function handleFolder(dir: FileSystemDirectoryHandle): Folder {
-  return cached(async () => {
+  const folder = cached(async () => {
     const out: Entry[] = []
-    for await (const h of dir.values()) {
-      out.push(h.kind === 'file' ? { name: h.name, file: () => (h as FileSystemFileHandle).getFile() } : { name: h.name, folder: handleFolder(h as FileSystemDirectoryHandle) })
+    try {
+      for await (const h of dir.values()) {
+        out.push(h.kind === 'file' ? fileEntry(h as FileSystemFileHandle) : { name: h.name, folder: handleFolder(h as FileSystemDirectoryHandle) })
+      }
+    } catch (e) {
+      // Keeps what was listed before the error; open() still tries the names it needs.
+      openErrors.push(`${dir.name}/ listing: ${(e as Error).name}`)
     }
     return out
   })
+  folder.open = async (name) => {
+    try {
+      return fileEntry(await dir.getFileHandle(name))
+    } catch (e) {
+      try {
+        return { name, folder: handleFolder(await dir.getDirectoryHandle(name)) }
+      } catch {
+        openErrors.push(`${dir.name}/${name}: ${(e as Error).name}`)
+        return null
+      }
+    }
+  }
+  return folder
 }
 
 // From a dropped folder (every browser).
@@ -52,10 +77,12 @@ export function entryFolder(dir: FileSystemDirectoryEntry): Folder {
   })
 }
 
+const child = async (dir: Folder, name: string): Promise<Entry | null> => (await dir.entries()).get(key(name)) ?? (await dir.open?.(name)) ?? null
+
 async function folderAt(root: Folder, path: string): Promise<Folder | null> {
   let dir: Folder | null = root
   for (const part of path.split('/').filter(Boolean)) {
-    const e: Entry | undefined = (await dir.entries()).get(key(part))
+    const e: Entry | null = await child(dir, part)
     dir = e && 'folder' in e ? e.folder : null
     if (!dir) return null
   }
@@ -65,7 +92,7 @@ async function folderAt(root: Folder, path: string): Promise<Folder | null> {
 async function fileAt(root: Folder, path: string): Promise<PathFile | null> {
   const parts = path.split('/')
   const dir = await folderAt(root, parts.slice(0, -1).join('/'))
-  const e = dir && (await dir.entries()).get(key(parts[parts.length - 1]))
+  const e = dir && (await child(dir, parts[parts.length - 1]))
   return e && 'file' in e ? { path: `${parts.slice(0, -1).join('/')}/${e.name}`, file: await e.file() } : null
 }
 
@@ -105,6 +132,7 @@ async function wadPictures(root: Folder): Promise<PathFile[]> {
 export interface SetupResult {
   ok: boolean
   lines: string[] // what was loaded or kept, one line each
+  needConfig?: boolean // the folder is fine but its cfg can't be opened from it: ask for the file
 }
 
 const fileName = (f: PathFile) => f.path.split('/').pop()!
@@ -160,7 +188,9 @@ async function findConfig(root: Folder): Promise<PathFile | null> {
   return cfgs.sort((a, b) => b.file.lastModified - a.file.lastModified)[0] ?? null
 }
 
-export async function importSetup(chosen: Folder, chosenName = ''): Promise<SetupResult> {
+// `config`: the cfg the user picked on its own, when the folder couldn't give it (see needConfig).
+export async function importSetup(chosen: Folder, chosenName = '', config?: File): Promise<SetupResult> {
+  openErrors.length = 0
   const found = await findQuakeRoot(chosen)
   if (!found) {
     const inside = /^(id1|qw|ezquake)$/i.test(chosenName) ? ` You chose the ${chosenName} folder: choose the folder that holds it.` : ' Choose your Quake folder.'
@@ -171,23 +201,45 @@ export async function importSetup(chosen: Folder, chosenName = ''): Promise<Setu
   }
   const root = found.dir
   const where = found.path ? ` in ${found.path}` : ''
-  const cfg = await findConfig(root)
-  if (!cfg) {
-    const ezquake = await folderAt(root, 'ezquake')
-    const inEzquake = ezquake ? [...(await entriesOf(ezquake)).values()].map((e) => e.name + ('folder' in e ? '/' : '')) : []
-    const seen = ezquake
-      ? ` The browser sees in ezquake: ${inEzquake.slice(0, 15).join(', ') || 'nothing'}${inEzquake.length > 15 ? '…' : ''}.`
-      : ' There is no ezquake folder in it.'
+  const cfg = config ? { path: config.name, file: config } : await findConfig(root)
+  // Chrome doesn't let a site open .cfg files in a folder from the folder picker: they are left out of its
+  // listings, and opening one by name is refused ("Name is not allowed", a TypeError). A file input can open it.
+  if (!cfg && openErrors.some((e) => e.startsWith('configs/config.cfg: TypeError'))) {
     return {
       ok: false,
-      lines: [`Found the Quake folder${where}, but no config.cfg in ezquake/configs, qw/configs, ezquake, qw or id1, and no other cfg in a configs folder.${seen} In ezQuake, cfg_save writes it.`],
+      needConfig: true,
+      lines: [
+        `Found the Quake folder${where}, but the browser doesn't let this site open .cfg files in a folder chosen this way. ` +
+          `Choose the config file itself: config.cfg in ${chosenName || 'your Quake folder'}${where ? `/${found.path}` : ''}/ezquake/configs. Or drop the Quake folder on the box instead.`,
+      ],
+    }
+  }
+  if (!cfg) {
+    const list = async (path: string) => {
+      const dir = await folderAt(root, path)
+      if (!dir) return ` There is no ${path} folder.`
+      const names = [...(await entriesOf(dir)).values()].map((e) => e.name + ('folder' in e ? '/' : ''))
+      return ` The browser sees in ${path}: ${names.slice(0, 15).join(', ') || 'nothing'}${names.length > 15 ? '…' : ''}.`
+    }
+    const opened = openErrors.find((e) => e.startsWith('configs/config.cfg'))
+    const listing = openErrors.filter((e) => e.includes('/ listing:'))
+    return {
+      ok: false,
+      lines: [
+        `Found the Quake folder${where}, but no config.cfg in ezquake/configs, qw/configs, ezquake, qw or id1, and no other cfg in a configs folder.` +
+          (await list('ezquake')) +
+          (await list('ezquake/configs')) +
+          (opened ? ` Opening ezquake/configs/config.cfg directly gave ${opened.split(': ')[1]}.` : '') +
+          (listing.length ? ` Listing failed for: ${listing.join(', ')}.` : '') +
+          ' Dropping the Quake folder on this box instead may work.',
+      ],
     }
   }
 
   const text = await readFileText(cfg.file)
   const lines = [
     ...(where ? [`Quake folder found${where}.`] : []),
-    ...(key(cfg.path) === 'ezquake/configs/config.cfg' ? [] : [`Config: ${cfg.path}.`]),
+    ...(config ? [`Config: ${config.name}, chosen on its own.`] : key(cfg.path) === 'ezquake/configs/config.cfg' ? [] : [`Config: ${cfg.path}.`]),
     importCfg(fileName(cfg), text),
   ]
   const cvars = lastValues(text)

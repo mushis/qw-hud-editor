@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { Modal } from './Modal'
 import { entryFolder, handleFolder, importSetup, type Folder, type SetupResult } from './setup'
 
@@ -15,12 +15,16 @@ export function SetupDialog({ onClose, onMessage }: { onClose: () => void; onMes
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
   const [result, setResult] = useState<SetupResult | null>(null)
+  // The last folder, to finish with a cfg picked on its own when the folder can't give it.
+  const [chosen, setChosen] = useState<{ folder: Folder; name: string } | null>(null)
+  const cfgInput = useRef<HTMLInputElement>(null)
 
-  const run = async (folder: Folder, name: string) => {
+  const run = async (folder: Folder, name: string, config?: File) => {
     setBusy(true)
     setResult(null)
+    setChosen({ folder, name })
     try {
-      const r = await importSetup(folder, name)
+      const r = await importSetup(folder, name, config)
       setResult(r)
       if (r.ok) onMessage(r.lines.find((l) => l.startsWith('Loaded')) ?? r.lines[0])
     } catch (e) {
@@ -90,6 +94,13 @@ export function SetupDialog({ onClose, onMessage }: { onClose: () => void; onMes
             It looks in <code>ezquake</code> first, then <code>qw</code>, the same as the game. Files that aren't there are skipped, and the textures you have now stay.
             Nothing is uploaded: the files are only read by this browser, and kept in it until you remove them. Importing a cfg later keeps these textures.
           </p>
+          {result?.needConfig && (
+            <ul className="setup-result">
+              {result.lines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
           <div
             data-own-drop
             className={`setup-drop${over ? ' over' : ''}`}
@@ -102,6 +113,24 @@ export function SetupDialog({ onClose, onMessage }: { onClose: () => void; onMes
           >
             {busy ? (
               'Reading…'
+            ) : result?.needConfig && chosen ? (
+              <>
+                <button className="primary" autoFocus onClick={() => cfgInput.current?.click()}>
+                  Choose config.cfg…
+                </button>
+                <span className="dim">or drop the Quake folder here</span>
+                <input
+                  ref={cfgInput}
+                  type="file"
+                  accept=".cfg,.txt"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (file) run(chosen.folder, chosen.name, file)
+                  }}
+                />
+              </>
             ) : canPick ? (
               <>
                 <button className="primary" onClick={pick}>
@@ -113,7 +142,7 @@ export function SetupDialog({ onClose, onMessage }: { onClose: () => void; onMes
               'Drop your Quake folder here'
             )}
           </div>
-          {result && (
+          {result && !result.needConfig && (
             <ul className="setup-result error">
               {result.lines.map((line) => (
                 <li key={line}>{line}</li>
