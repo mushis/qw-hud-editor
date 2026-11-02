@@ -7,6 +7,7 @@ import { EZQUAKE_DEFAULTS, withDefaults } from './defaults'
 import { IMPLS, implFor } from './elements'
 import { decodePcx, decodeTga, decodeWad } from '../render/decode'
 import { texturePriority } from '../render/textures'
+import { builtinMask, builtinPixels, crosshairFromCvars } from '../render/crosshair'
 import { findIssues } from './issues'
 import { frameExtents, layoutHud, screenFor, shouldShow, viewRect, wouldCycle } from './layout'
 import { DEFAULT_PREVIEW } from './preview'
@@ -175,7 +176,7 @@ describe('issues', () => {
 
   it('reports elements hidden by their parent', () => {
     const issues = issuesOf({ face: { show: '0' }, health: { show: '1', place: 'face' } })
-    expect(issues).toEqual([{ element: 'health', severity: 'warning', message: 'Not drawn: it is placed on face, which is hidden.' }])
+    expect(issues).toEqual([{ element: 'health', severity: 'warning', message: 'Not drawn: it is placed on face, which is hidden.', params: ['place'] }])
   })
 
   it('grows a group to its picture with pic_scalemode 3', () => {
@@ -297,5 +298,21 @@ describe('import setup', () => {
     const img = decodePcx(pcx)
     expect([img.w, img.h]).toEqual([2, 1])
     expect([...img.data]).toEqual([10, 20, 30, 255, 0, 0, 0, 0])
+  })
+})
+
+describe('crosshair', () => {
+  it('reads the crosshair cvars, with ezQuake defaults for the rest', () => {
+    expect(crosshairFromCvars({ crosshair: '2', crosshairsize: '50', crosshairscale: '1.7' })).toEqual({
+      crosshair: 2, size: 20, color: '255 0 0', alpha: 1, scale: 1, scalemethod: 0,
+    })
+  })
+
+  it('builds the built-in shapes like CreateBuiltinCrosshair', () => {
+    const at = (mask: boolean[], size: number) => mask.flatMap((on, i) => (on ? [[i % size, Math.floor(i / size)]] : []))
+    expect(builtinPixels(0)).toBe(8)
+    expect(at(builtinMask(4, 8), 8)).toEqual([[3, 3]]) // dot
+    expect(at(builtinMask(3, 8), 8)).toHaveLength(5) // small cross: centre plus one each way
+    expect(at(builtinMask(2, 8), 8)).toHaveLength(8) // stipple: every other pixel down and across column/row 3
   })
 })

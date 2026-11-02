@@ -64,8 +64,8 @@ export function Stage() {
 
   useEffect(() => {
     const c = canvasRef.current!.getContext('2d')!
-    drawHud(c, doc, ordered, ctx, settings.width / screen.width, settings.height / screen.height, isActive, settings.showInactive, screen.view)
-  }, [doc, ordered, ctx, screen, settings.width, settings.height, settings.showInactive, isActive, assetTick])
+    drawHud(c, doc, ordered, ctx, settings.width / screen.width, settings.height / screen.height, isActive, settings.showInactive, screen.view, settings.crosshair)
+  }, [doc, ordered, ctx, screen, settings.width, settings.height, settings.showInactive, settings.crosshair, isActive, assetTick])
 
   const zoom = ZOOMS.includes(settings.zoom as (typeof ZOOMS)[number]) ? settings.zoom : 1
   const cssWidth = fitWidth * zoom

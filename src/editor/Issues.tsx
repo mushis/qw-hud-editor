@@ -1,21 +1,23 @@
 import { useMemo, useState } from 'react'
-import { DEFAULTS_SOURCE, EZQUAKE_DEFAULTS } from '../hud/defaults'
-import { findIssues, type Severity } from '../hud/issues'
+import { DEFAULTS_SOURCE, defaultValue } from '../hud/defaults'
+import { findIssues, type Issue, type Severity } from '../hud/issues'
 import { useStore } from '../store'
 import { useHudLayout } from './useHudLayout'
 
 const ICONS: Record<Severity, string> = { error: '●', warning: '▲', info: 'i' }
 
-// Panel under the stage listing problems; clicking one selects its element, Reset puts it back to the defaults.
+// Panel under the stage listing problems; clicking one selects its element, Reset puts the settings at fault back to their defaults.
 export function Issues() {
   const { doc, placed, screen } = useHudLayout()
   const selected = useStore((s) => s.selected)
   const select = useStore((s) => s.select)
   const editParams = useStore((s) => s.editParams)
-  // Keeps show, so the element stays on screen at its default place and size.
-  const reset = (element: string) => {
-    editParams(element, { ...EZQUAKE_DEFAULTS[element], show: doc.elements[element]?.show ?? '1' })
-    select(element)
+  // The defaults of the settings at fault, for the ones ezQuake has a default for.
+  const defaultsFor = (issue: Issue) =>
+    Object.fromEntries(issue.params.flatMap((p) => (defaultValue(issue.element, p) === undefined ? [] : [[p, defaultValue(issue.element, p)!]])))
+  const reset = (issue: Issue) => {
+    editParams(issue.element, defaultsFor(issue))
+    select(issue.element)
   }
   const [open, setOpen] = useState(true)
   const issues = useMemo(() => findIssues(doc, placed, screen), [doc, placed, screen])
@@ -41,18 +43,22 @@ export function Issues() {
               </span>
               <span className="mono">{issue.element}</span>
               <span className="message">{issue.message}</span>
-              {EZQUAKE_DEFAULTS[issue.element] && (
+              {Object.keys(defaultsFor(issue)).length > 0 ? (
                 <button
                   className="issue-reset"
                   onClick={(e) => {
                     e.stopPropagation()
-                    reset(issue.element)
+                    reset(issue)
                   }}
-                  title={`Set every setting of ${issue.element} back to the ezQuake default, except show, and select it. This often fixes the issue. You can undo this.
+                  title={`Set ${Object.entries(defaultsFor(issue))
+                    .map(([p, v]) => `${issue.element}_${p} back to its ezQuake default "${v}"`)
+                    .join(' and ')}, and select ${issue.element}. This often fixes the issue. You can undo this.
 (defaults from ${DEFAULTS_SOURCE})`}
                 >
                   Reset
                 </button>
+              ) : (
+                <span className="issue-reset-none" />
               )}
             </li>
           ))}

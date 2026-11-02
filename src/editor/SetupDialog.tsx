@@ -74,10 +74,13 @@ export function SetupDialog({ onClose, onMessage }: { onClose: () => void; onMes
               imports the HUD and screen settings from <code>ezquake/configs/config.cfg</code>
             </li>
             <li>
-              loads the charset named by <code>gl_consolefont</code> (or <code>loadcharset</code>), from <code>textures/charsets</code>
+              loads the charset named by <code>gl_consolefont</code> (or <code>loadcharset</code>), from <code>textures/charsets</code>; when
+              neither is set, ezQuake's own (povo5)
             </li>
             <li>
-              loads the crosshair named by <code>crosshairimage</code>, from <code>crosshairs</code> or <code>textures/crosshairs</code>
+              loads the crosshair named by <code>crosshairimage</code>, from <code>crosshairs</code> or <code>textures/crosshairs</code>; when
+              it isn't set, ezQuake's own one picked by <code>crosshair</code>, sized and coloured by <code>crosshairsize</code>,{' '}
+              <code>crosshaircolor</code> and <code>crosshairscale</code>
             </li>
             <li>
               loads the HUD pictures (numbers, faces, icons…) from <code>textures/wad</code>

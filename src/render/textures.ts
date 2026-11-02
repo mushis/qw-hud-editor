@@ -24,20 +24,12 @@ interface Row extends Stored {
 // Sets from "Import setup" have a kind; a newer set of the same kind replaces the older one.
 export type TextureKind = 'wad' | 'charset' | 'crosshair'
 
-// The crosshair cvars that change how crosshairimage is drawn.
-export interface CrosshairLook {
-  size: number // crosshairsize
-  color: string // crosshaircolor
-  alpha: number // crosshairalpha
-}
-
 export interface TextureSet {
   id: string
   label: string // what was loaded: a folder, a file, "a.png +3"
   created: number
   names: string[]
   kind?: TextureKind
-  crosshair?: CrosshairLook
 }
 
 interface TextureState {
@@ -114,7 +106,7 @@ export async function loadSavedTextures() {
   }
 }
 
-async function addSet(label: string, list: Stored[], extra: Pick<TextureSet, 'kind' | 'crosshair'> = {}) {
+async function addSet(label: string, list: Stored[], extra: Pick<TextureSet, 'kind'> = {}) {
   const set: TextureSet = { id: crypto.randomUUID(), label, created: Date.now(), names: list.map((t) => t.name), ...extra }
   const rows: Row[] = list.map((t) => ({ ...t, set: set.id, key: `${set.id}/${t.name}` }))
   rows.forEach(remember)
@@ -287,21 +279,19 @@ export async function droppedFiles(dt: DataTransfer): Promise<PathFile[]> {
 }
 
 // Replaces the set of this kind (if any) with these files. Charset and crosshair take one file each.
-export async function importKind(kind: TextureKind, label: string, files: PathFile[], crosshair?: CrosshairLook): Promise<string[]> {
+export async function importKind(kind: TextureKind, label: string, files: PathFile[]): Promise<string[]> {
   const list: Stored[] = []
   for (const { path, file } of files) {
     const tex = await fromImage(path, new Uint8Array(await file.arrayBuffer()))
     if (tex) list.push(kind === 'wad' ? tex : { ...tex, name: kind === 'charset' ? CHARSET : CROSSHAIR })
   }
   if (!list.length) return []
-  for (const old of useTextures.getState().sets.filter((s) => s.kind === kind)) await removeTextureSet(old.id)
-  await addSet(label, list, { kind, crosshair })
+  await removeKind(kind)
+  await addSet(label, list, { kind })
   return list.map((t) => t.name)
 }
 
-// The crosshairimage picture and how to draw it, when the setup import found one.
-export function getCrosshair(): (Picture & CrosshairLook) | null {
-  const pic = getTexture(CROSSHAIR)
-  const look = useTextures.getState().sets.find((s) => s.kind === 'crosshair')?.crosshair
-  return pic && look ? { ...pic, ...look } : null
+// Back to the editor's own picture for this kind (ezQuake's povo5 charset, its built-in crosshair).
+export async function removeKind(kind: TextureKind) {
+  for (const old of useTextures.getState().sets.filter((s) => s.kind === kind)) await removeTextureSet(old.id)
 }

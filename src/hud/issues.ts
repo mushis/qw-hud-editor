@@ -12,6 +12,7 @@ export interface Issue {
   element: string
   severity: Severity
   message: string
+  params: string[] // the settings at fault, which Reset puts back to their defaults
 }
 
 export type Edge = 'left' | 'right' | 'top' | 'bottom'
@@ -66,26 +67,26 @@ export function findIssues(doc: HudDoc, placed: Map<string, Placed>, screen: Scr
   for (const { name } of ELEMENTS) {
     const p = doc.elements[name]
     if (!p || !shouldShow(p.show)) continue
-    const add = (severity: Severity, message: string) => issues.push({ element: name, severity, message })
+    const add = (severity: Severity, message: string, params: string[] = []) => issues.push({ element: name, severity, message, params })
 
     for (const param of Object.keys(p)) {
       const reason = invalidReason(doc, name, param)
-      if (reason) add('warning', reason)
+      if (reason) add('warning', reason, [param])
     }
     const parent = (p.place ?? '').replace(/^@/, '')
     const isElement = parent !== name && !!doc.elements[parent]
 
     const box = placed.get(name)
     if (!box) {
-      if (isElement && wouldCycle(doc, name, parent)) add('error', `Placement loop with ${parent}: neither is drawn.`)
-      else if (isElement && !placed.has(parent)) add('warning', `Not drawn: it is placed on ${parent}, which is hidden.`)
+      if (isElement && wouldCycle(doc, name, parent)) add('error', `Placement loop with ${parent}: neither is drawn.`, ['place'])
+      else if (isElement && !placed.has(parent)) add('warning', `Not drawn: it is placed on ${parent}, which is hidden.`, ['place'])
       continue
     }
 
     if (box.draw) {
       const { edges, hidden } = offscreen(box, screen)
-      if (hidden) add('error', `Off-screen at ${box.outer.x}, ${box.outer.y}: not visible at ${screen.width}×${screen.height}.`)
-      else if (edges.length) add('warning', `Partly off-screen: cut off at the ${edges.join(' and ')} edge.`)
+      if (hidden) add('error', `Off-screen at ${box.outer.x}, ${box.outer.y}: not visible at ${screen.width}×${screen.height}.`, ['pos_x', 'pos_y'])
+      else if (edges.length) add('warning', `Partly off-screen: cut off at the ${edges.join(' and ')} edge.`, ['pos_x', 'pos_y'])
     }
 
     if (name.startsWith('group') && pictureName(p.picture) && !findPicture(p.picture)) {

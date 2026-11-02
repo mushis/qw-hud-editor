@@ -2,7 +2,8 @@ import type { HudDoc } from '../hud/cfg'
 import { parseRgb } from '../hud/colors'
 import { implFor, type Ctx, type Gfx, type TextColor } from '../hud/elements'
 import type { Placed, Rect } from '../hud/layout'
-import { CHARSET, getCrosshair, getTexture } from './textures'
+import { builtinCanvas, builtinPixels, type Crosshair } from './crosshair'
+import { CHARSET, CROSSHAIR, getTexture } from './textures'
 
 const BASE = import.meta.env.BASE_URL
 
@@ -38,13 +39,15 @@ const BIG_GLYPHS: Record<string, string> = { colon: ':', minus: '-', slash: '/' 
 
 // &cRGB text: ezQuake multiplies the charset by the colour. One tinted copy per charset and colour.
 const tinted = new Map<string, HTMLCanvasElement>()
-function tint(img: HTMLImageElement, color: string): HTMLCanvasElement {
-  const key = `${img.src}|${color}`
+const sources = new WeakMap<HTMLCanvasElement, string>()
+function tint(img: HTMLImageElement | HTMLCanvasElement, color: string): HTMLCanvasElement {
+  if (img instanceof HTMLCanvasElement && !sources.has(img)) sources.set(img, crypto.randomUUID())
+  const key = `${img instanceof HTMLImageElement ? img.src : sources.get(img)}|${color}`
   let canvas = tinted.get(key)
   if (!canvas) {
     canvas = document.createElement('canvas')
-    canvas.width = img.naturalWidth
-    canvas.height = img.naturalHeight
+    canvas.width = img.width
+    canvas.height = img.height
     const t = canvas.getContext('2d')!
     t.drawImage(img, 0, 0)
     t.globalCompositeOperation = 'multiply'
@@ -122,22 +125,31 @@ function makeGfx(c: CanvasRenderingContext2D): RenderGfx {
   }
 }
 
-// crosshairimage (Draw_Crosshair): centred on the view, sized in real pixels by crosshairsize, tinted by crosshaircolor.
-function drawCrosshair(c: CanvasRenderingContext2D, view: Rect, kx: number, ky: number) {
-  const cross = getCrosshair()
-  const img = cross && load(cross.url)
-  if (!cross || !img || !cross.alpha || !cross.size) return
-  const [r, g, b] = parseRgb(cross.color) ?? [255, 0, 0]
-  const before = cross.size * (cross.w * 0.5 - 0.5)
-  const side = before + cross.size * (cross.h * 0.5 + 0.5)
+// Draw_Crosshair: centred on the view and sized in real pixels. crosshairimage, when loaded, is drawn whatever
+// crosshair is; else crosshair 2-7 are the built-in ones, grown by width / 320 unless crosshairscalemethod is 1,
+// and crosshair 1 is a white "+" from the charset. Pictures are tinted by crosshaircolor.
+function drawCrosshair(c: CanvasRenderingContext2D, g: Gfx, view: Rect, kx: number, ky: number, cross: Crosshair) {
+  const cx = view.x + view.w / 2
+  const cy = view.y + view.h / 2
+  const custom = getTexture(CROSSHAIR)
+  let pic: HTMLImageElement | HTMLCanvasElement | null = custom ? load(custom.url) : null
+  let w = custom?.w ?? 0
+  let h = custom?.h ?? 0
+  let grow = 1
+  if (!custom && cross.crosshair >= 2 && cross.crosshair <= 7) {
+    pic = builtinCanvas(cross.crosshair, cross.scale)
+    w = h = builtinPixels(cross.scale)
+    grow = cross.scalemethod ? 1 : c.canvas.width / 320
+  } else if (!custom) {
+    if (cross.crosshair === 1) g.text('+', cx - 4, cy - 4, 1)
+    return
+  }
+  if (!pic || !cross.alpha || !cross.size) return
+  const [r, gr, b] = parseRgb(cross.color) ?? [255, 0, 0]
+  const before = (w * 0.5 - 0.5) * grow * cross.size
+  const side = before + (h * 0.5 + 0.5) * grow * cross.size
   c.globalAlpha = cross.alpha
-  c.drawImage(
-    r === 255 && g === 255 && b === 255 ? img : tint(img, `rgb(${r},${g},${b})`),
-    view.x + view.w / 2 - before / kx,
-    view.y + view.h / 2 - before / ky,
-    side / kx,
-    side / ky,
-  )
+  c.drawImage(r === 255 && gr === 255 && b === 255 ? pic : tint(pic, `rgb(${r},${gr},${b})`), cx - before / kx, cy - before / ky, side / kx, side / ky)
   c.globalAlpha = 1
 }
 
@@ -153,12 +165,13 @@ export function drawHud(
   isActive: (name: string) => boolean,
   showInactive: boolean,
   view: Rect,
+  crosshair: Crosshair,
 ) {
   c.clearRect(0, 0, c.canvas.width, c.canvas.height)
   c.imageSmoothingEnabled = true
   c.setTransform(kx, 0, 0, ky, 0, 0)
-  drawCrosshair(c, view, kx, ky)
   const g = makeGfx(c)
+  drawCrosshair(c, g, view, kx, ky, crosshair)
   for (const placed of ordered) {
     if (!placed.draw) continue
     const active = isActive(placed.name)

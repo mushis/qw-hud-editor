@@ -1298,3 +1298,8 @@ button.primary:disabled {
   padding: 0 8px;
   font-size: 11px;
 }
+
+.issues li .issue-reset-none {
+  flex: none;
+  width: 44px;
+}

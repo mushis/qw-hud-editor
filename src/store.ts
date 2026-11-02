@@ -3,6 +3,7 @@ import type { ClientSettings, HudDoc } from './hud/cfg'
 import { emptyDoc } from './hud/cfg'
 import { withDefaults } from './hud/defaults'
 import { DEFAULT_PREVIEW, type Preview } from './hud/preview'
+import { DEFAULT_CROSSHAIR, type Crosshair } from './render/crosshair'
 import type { ThemeId } from './themes'
 
 // Client settings (resolution, conscale, conwidth/conheight, viewsize) plus editor preferences.
@@ -12,6 +13,7 @@ export interface Settings extends ClientSettings {
   showInactive: boolean // draw elements that would not show in the current view mode
   zoom: number // 1 = fit the window, 2 and 4 = magnified (scrollable)
   theme: ThemeId // editor colours
+  crosshair: Crosshair // the crosshair cvars, from Import setup
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showInactive: false,
   zoom: 1,
   theme: 'rust',
+  crosshair: DEFAULT_CROSSHAIR,
 }
 
 const HISTORY_LIMIT = 200
