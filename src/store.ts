@@ -3,6 +3,7 @@ import type { ClientSettings, HudDoc } from './hud/cfg'
 import { emptyDoc } from './hud/cfg'
 import { withDefaults } from './hud/defaults'
 import { DEFAULT_PREVIEW, type Preview } from './hud/preview'
+import type { ThemeId } from './themes'
 
 // Client settings (resolution, conscale, conwidth/conheight, viewsize) plus editor preferences.
 export interface Settings extends ClientSettings {
@@ -10,6 +11,7 @@ export interface Settings extends ClientSettings {
   background: string // url, '' for none
   showInactive: boolean // draw elements that would not show in the current view mode
   zoom: number // 1 = fit the window, 2 and 4 = magnified (scrollable)
+  theme: ThemeId // editor colours
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,9 +22,10 @@ export const DEFAULT_SETTINGS: Settings = {
   conheight: 0,
   viewsize: 100,
   exportClient: false,
-  background: 'assets/backgrounds/default.webp',
+  background: 'assets/backgrounds/vanilla.webp',
   showInactive: false,
   zoom: 1,
+  theme: 'rust',
 }
 
 const HISTORY_LIMIT = 200
@@ -62,12 +65,17 @@ function loadSaved(): Partial<Pick<State, 'doc' | 'settings' | 'preview'>> {
 
 const saved = loadSaved()
 
+// The first background was saved as default.webp before it was renamed.
+function migrateSettings(s: Settings): Settings {
+  return s.background === 'assets/backgrounds/default.webp' ? { ...s, background: DEFAULT_SETTINGS.background } : s
+}
+
 export const useStore = create<State>((set, get) => ({
   doc: saved.doc ? withDefaults(saved.doc) : emptyDoc(),
   selected: null,
   // The view mode always starts as player.
   preview: { ...DEFAULT_PREVIEW, ...saved.preview, mode: DEFAULT_PREVIEW.mode },
-  settings: { ...DEFAULT_SETTINGS, ...saved.settings },
+  settings: migrateSettings({ ...DEFAULT_SETTINGS, ...saved.settings }),
   past: [],
   future: [],
 
@@ -114,8 +122,7 @@ export const hasSavedDoc = () => saved.doc !== undefined
 
 useStore.subscribe((s) => {
   try {
-    // Uploaded backgrounds are data URLs and can exceed the quota; don't persist them.
-    const settings = s.settings.background.startsWith('data:') ? { ...s.settings, background: DEFAULT_SETTINGS.background } : s.settings
+    const settings = s.settings
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ doc: s.doc, settings, preview: s.preview }))
   } catch {
     // storage unavailable or full: editing still works, it just isn't remembered

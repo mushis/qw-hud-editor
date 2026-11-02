@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { offscreen } from '../hud/issues'
 import type { Placed } from '../hud/layout'
 import { drawHud, setAssetListener } from '../render/renderer'
+import { CUSTOM_BACKGROUND, useCustomBackground } from '../render/textures'
 import { useStore } from '../store'
 import { useHudLayout } from './useHudLayout'
 
@@ -34,6 +35,8 @@ export function Stage() {
   const { doc, screen, ctx, placed, ordered, isActive } = useHudLayout()
   const settings = useStore((s) => s.settings)
   const selected = useStore((s) => s.selected)
+  const customBackground = useCustomBackground((s) => s.url)
+  const background = settings.background === CUSTOM_BACKGROUND ? customBackground : settings.background
   const { select, checkpoint, setParams, setSettings } = useStore.getState()
 
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -169,7 +172,7 @@ export function Stage() {
     <div className="stage-area">
       <div className={`stage-wrap${zoom > 1 ? ' zoomed' : ''}`} ref={wrapRef}>
         <div className="stage" style={{ width: cssWidth, height: cssHeight }}>
-          {settings.background && <img className="stage-bg" src={settings.background} alt="" draggable={false} />}
+          {background && <img className="stage-bg" src={background} alt="" draggable={false} />}
           <canvas ref={canvasRef} width={settings.width} height={settings.height} />
           <div
             className={`stage-overlay${hovered ? ' over' : ''}`}

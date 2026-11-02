@@ -62,20 +62,23 @@ const DB = 'qw-hud-editor'
 
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 2)
+    const req = indexedDB.open(DB, 3)
     req.onupgradeneeded = (e) => {
       const d = req.result
-      // Version 1 kept one flat list of textures, without sets.
-      if (e.oldVersion < 2 && d.objectStoreNames.contains('textures')) d.deleteObjectStore('textures')
-      d.createObjectStore('textures', { keyPath: 'key' })
-      d.createObjectStore('sets', { keyPath: 'id' })
+      if (e.oldVersion < 2) {
+        // Version 1 kept one flat list of textures, without sets.
+        if (d.objectStoreNames.contains('textures')) d.deleteObjectStore('textures')
+        d.createObjectStore('textures', { keyPath: 'key' })
+        d.createObjectStore('sets', { keyPath: 'id' })
+      }
+      if (e.oldVersion < 3) d.createObjectStore('files') // other user files, e.g. the uploaded background
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
 }
 
-async function tx<T>(store: 'textures' | 'sets', mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T> | void): Promise<T | undefined> {
+async function tx<T>(store: 'textures' | 'sets' | 'files', mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T> | void): Promise<T | undefined> {
   const d = await db()
   return new Promise((resolve, reject) => {
     const t = d.transaction(store, mode)
@@ -117,6 +120,31 @@ export async function removeTextureSet(id: string) {
   rebuild(useTextures.getState().sets.filter((s) => s.id !== id))
   await tx('textures', 'readwrite', (s) => keys.forEach((k) => s.delete(k))).catch(() => {})
   await tx('sets', 'readwrite', (s) => s.delete(id)).catch(() => {})
+}
+
+// ---------------------------------------------------------------- uploaded background
+
+// The settings only say "custom"; the image itself is kept here (too big for localStorage).
+export const CUSTOM_BACKGROUND = 'custom'
+export const useCustomBackground = create<{ url: string | null }>(() => ({ url: null }))
+
+function showBackground(blob: Blob | undefined) {
+  const old = useCustomBackground.getState().url
+  if (old) URL.revokeObjectURL(old)
+  useCustomBackground.setState({ url: blob ? URL.createObjectURL(blob) : null })
+}
+
+export async function loadCustomBackground() {
+  try {
+    showBackground(await tx<Blob>('files', 'readonly', (s) => s.get('background') as IDBRequest<Blob>))
+  } catch {
+    // not remembered: the "custom" option then falls back to no background
+  }
+}
+
+export async function saveCustomBackground(file: Blob) {
+  showBackground(file)
+  await tx('files', 'readwrite', (s) => s.put(file, 'background')).catch(() => {})
 }
 
 // ---------------------------------------------------------------- importing

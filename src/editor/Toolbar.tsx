@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import logo from '../assets/brand/logo-64.png'
 import type { ViewMode } from '../hud/catalog'
-import { removeTextureSet, useTextures } from '../render/textures'
+import { CUSTOM_BACKGROUND, removeTextureSet, saveCustomBackground, useCustomBackground, useTextures } from '../render/textures'
 import { useStore, virtualSize } from '../store'
+import { nextTheme, themeOf } from '../themes'
 import { fetchSharedCfg, galleryEnabled, openedFromSignInLink, useGallery } from '../gallery/api'
 import { MyHuds } from '../gallery/MyHuds'
 import { ShareDialog } from '../gallery/ShareDialog'
@@ -25,6 +26,14 @@ const RESOLUTIONS: [number, number][] = [
 ]
 const VIEWSIZES = [100, 110, 120]
 
+// In-game screenshots to place the HUD on.
+const BACKGROUNDS: [string, string][] = [
+  ['vanilla.webp', 'vanilla'],
+  ['grey.jpg', 'grey'],
+  ['flat.jpg', 'flat'],
+  ['peppe.jpg', 'peppe'],
+]
+
 const icon = (d: string[]) => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     {d.map((p) => (
@@ -34,6 +43,14 @@ const icon = (d: string[]) => (
 )
 const UNDO = icon(['M9 14 4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'])
 const REDO = icon(['m15 14 5-5-5-5', 'M20 9H9.5a5.5 5.5 0 0 0 0 11H13'])
+const PALETTE = (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22a10 10 0 1 1 10-10c0 2.8-2.2 4-4.5 4H15a2 2 0 0 0-1.5 3.3A1.7 1.7 0 0 1 12 22z" />
+    <circle cx="7.5" cy="10.5" r="1" fill="currentColor" />
+    <circle cx="10.5" cy="6.5" r="1" fill="currentColor" />
+    <circle cx="15.5" cy="7.5" r="1" fill="currentColor" />
+  </svg>
+)
 
 export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const settings = useStore((s) => s.settings)
@@ -43,6 +60,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const { setSettings, setPreview, undo, redo } = useStore.getState()
   const gallery = useGallery()
   const textureSets = useTextures((s) => s.sets)
+  const customBackground = useCustomBackground((s) => s.url)
   const cfgInput = useRef<HTMLInputElement>(null)
   const bgInput = useRef<HTMLInputElement>(null)
   const texInput = useRef<HTMLInputElement>(null)
@@ -224,12 +242,16 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
 
       <div className="group">
         <select
-          value={settings.background.startsWith('data:') ? 'custom' : settings.background}
+          value={settings.background}
           onChange={(e) => (e.target.value === 'upload' ? bgInput.current?.click() : setSettings({ background: e.target.value }))}
         >
-          <option value="assets/backgrounds/default.webp">Background: screenshot</option>
+          {BACKGROUNDS.map(([file, name]) => (
+            <option key={file} value={`assets/backgrounds/${file}`}>
+              Background: {name}
+            </option>
+          ))}
           <option value="">Background: none</option>
-          {settings.background.startsWith('data:') && <option value="custom">Background: custom</option>}
+          {customBackground && <option value={CUSTOM_BACKGROUND}>Background: uploaded</option>}
           <option value="upload">Upload background…</option>
         </select>
         <input
@@ -240,9 +262,8 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
           onChange={(e) => {
             const file = e.target.files?.[0]
             if (!file) return
-            const reader = new FileReader()
-            reader.onload = () => setSettings({ background: String(reader.result) })
-            reader.readAsDataURL(file)
+            e.target.value = ''
+            saveCustomBackground(file).then(() => setSettings({ background: CUSTOM_BACKGROUND }))
           }}
         />
         <button
@@ -289,6 +310,14 @@ Click to remove this set (anything it replaced shows again).`}
         </button>
         <button className="icon help" onClick={() => setDialog('about')} title="About and help" aria-label="About and help">
           ?
+        </button>
+        <button
+          className="icon theme"
+          onClick={() => setSettings({ theme: nextTheme(settings.theme) })}
+          title={`Theme: ${themeOf(settings.theme).name}. Click for the next one (${themeOf(nextTheme(settings.theme)).name}).`}
+          aria-label="Change theme"
+        >
+          {PALETTE}
         </button>
       </div>
       {(dialog === 'about' || dialog === 'admin') && <About admin={dialog === 'admin'} onClose={close} />}

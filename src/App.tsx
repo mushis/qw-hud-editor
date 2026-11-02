@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { parseCfg } from './hud/cfg'
 import { withDefaults } from './hud/defaults'
 import { importCfg, loadTextureFiles } from './editor/actions'
@@ -9,7 +9,7 @@ import { Palette } from './editor/Palette'
 import { Stage } from './editor/Stage'
 import { Toolbar } from './editor/Toolbar'
 import { useGallery } from './gallery/api'
-import { droppedFiles, isTextureFile, loadSavedTextures } from './render/textures'
+import { droppedFiles, isTextureFile, loadCustomBackground, loadSavedTextures } from './render/textures'
 import { hasSavedDoc, useStore } from './store'
 
 function useKeyboard() {
@@ -95,9 +95,14 @@ export default function App() {
   const [message, setMessage] = useState('')
   useKeyboard()
   const dragging = useFileDrop(setMessage)
+  const theme = useStore((s) => s.settings.theme)
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
 
   useEffect(() => {
     loadSavedTextures()
+    loadCustomBackground()
     useGallery.getState().refresh()
   }, [])
 

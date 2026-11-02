@@ -1,3 +1,4 @@
+/* Themes (src/themes.ts). Rust is the default. */
 :root {
   --bg: #15161a;
   --panel: #1d1f24;
@@ -6,11 +7,83 @@
   --text: #d8dadf;
   --dim: #8a8f99;
   --accent: #e0a040;
+  --accent-ink: #000; /* text on the accent colour */
+  --accent-bg: #3a2f1c; /* selected rows */
+  --accent-soft: rgba(224, 160, 64, 0.08);
+  --note-bg: #2a2216;
+  --note-border: #5a4520;
   --warn: #e07060;
+  --danger: #b0382c;
+  --caution: #e0b040;
+  --info: #6aa0e0;
   color-scheme: dark;
   font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--text);
   background: var(--bg);
+}
+
+:root[data-theme='slime'] {
+  --bg: #111611;
+  --panel: #182019;
+  --panel-2: #202a21;
+  --border: #2e3b2f;
+  --text: #d5e2d3;
+  --dim: #849687;
+  --accent: #82d45c;
+  --accent-bg: #23361c;
+  --accent-soft: rgba(130, 212, 92, 0.08);
+  --note-bg: #1b2916;
+  --note-border: #3d5a2e;
+}
+
+:root[data-theme='lava'] {
+  --bg: #171112;
+  --panel: #20181a;
+  --panel-2: #2a1f21;
+  --border: #3d2b2d;
+  --text: #ead9d5;
+  --dim: #9c8582;
+  --accent: #ff6b3d;
+  --accent-bg: #44221a;
+  --accent-soft: rgba(255, 107, 61, 0.09);
+  --note-bg: #2e1a15;
+  --note-border: #6b3121;
+  --warn: #ff8a70;
+}
+
+:root[data-theme='teleport'] {
+  --bg: #11121b;
+  --panel: #191a26;
+  --panel-2: #222336;
+  --border: #32344d;
+  --text: #d9dbf2;
+  --dim: #8b8dad;
+  --accent: #9a96ff;
+  --accent-bg: #2c2a55;
+  --accent-soft: rgba(154, 150, 255, 0.1);
+  --note-bg: #1e1e3b;
+  --note-border: #46447d;
+  --caution: #e6c35c;
+}
+
+:root[data-theme='daylight'] {
+  --bg: #e9e6e0;
+  --panel: #f6f4f0;
+  --panel-2: #ffffff;
+  --border: #d2cdc4;
+  --text: #24211c;
+  --dim: #6c665c;
+  --accent: #b5670f;
+  --accent-ink: #fff;
+  --accent-bg: #f4e1c6;
+  --accent-soft: rgba(181, 103, 15, 0.1);
+  --note-bg: #fbf0df;
+  --note-border: #e0c393;
+  --warn: #c0392b;
+  --danger: #c0392b;
+  --caution: #b7860b;
+  --info: #2f6fb5;
+  color-scheme: light;
 }
 
 * {
@@ -128,7 +201,22 @@ button.icon.help {
   min-width: 0;
   margin-left: 6px;
   border-radius: 50%;
-  font-weight: 700;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+button.icon.help:hover {
+  filter: brightness(1.15);
+}
+
+button.icon.theme {
+  width: 26px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--accent);
 }
 
 .toolbar label {
@@ -200,7 +288,7 @@ button.icon.help {
 }
 
 .palette-item.selected {
-  background: #3a2f1c;
+  background: var(--accent-bg);
   color: var(--accent);
 }
 
@@ -279,7 +367,7 @@ main {
 
 .hit.selected {
   outline: 1px solid var(--accent);
-  background: rgba(224, 160, 64, 0.08);
+  background: var(--accent-soft);
 }
 
 .hit.clipped {
@@ -297,14 +385,14 @@ main {
   font-size: 11px;
   white-space: nowrap;
   color: #fff;
-  background: #b0382c;
+  background: var(--danger);
   border: 1px solid #e07060;
   border-radius: 3px;
   cursor: pointer;
 }
 
 .offscreen-marker.selected {
-  color: #000;
+  color: var(--accent-ink);
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -320,7 +408,7 @@ main {
   padding: 0 4px;
   font-size: 11px;
   white-space: nowrap;
-  color: #000;
+  color: var(--accent-ink);
   background: var(--accent);
   pointer-events: none;
 }
@@ -460,7 +548,7 @@ main {
 }
 
 .copy-pop li:hover {
-  background: #3a2f1c;
+  background: var(--accent-bg);
   color: var(--accent);
 }
 
@@ -666,7 +754,7 @@ main {
 }
 
 .zoom button.active {
-  color: #000;
+  color: var(--accent-ink);
   background: var(--accent);
 }
 
@@ -725,11 +813,11 @@ main {
 }
 
 .issues-head .count.some {
-  background: #5a4520;
+  background: var(--note-border);
 }
 
 .issues-head .count.bad {
-  background: #b0382c;
+  background: var(--danger);
 }
 
 .issues ul {
@@ -751,7 +839,7 @@ main {
 }
 
 .issues li.selected {
-  background: #3a2f1c;
+  background: var(--accent-bg);
 }
 
 .issues li .sev {
@@ -771,11 +859,11 @@ main {
 }
 
 .issues li.warning .sev {
-  color: #e0b040;
+  color: var(--caution);
 }
 
 .issues li.info .sev {
-  color: #6aa0e0;
+  color: var(--info);
   font-style: italic;
   font-family: Georgia, serif;
 }
@@ -903,7 +991,7 @@ main {
 
 
 button.danger {
-  border-color: #b0382c;
+  border-color: var(--danger);
   color: var(--warn);
 }
 
@@ -957,7 +1045,7 @@ button.danger {
 }
 
 button.primary {
-  color: #000;
+  color: var(--accent-ink);
   background: var(--accent);
   border-color: var(--accent);
 }
@@ -971,9 +1059,9 @@ button.primary:disabled {
 .recovery {
   margin: 12px 0;
   padding: 10px 12px;
-  border: 1px solid #5a4520;
+  border: 1px solid var(--note-border);
   border-radius: 6px;
-  background: #2a2216;
+  background: var(--note-bg);
 }
 
 .recovery p {
