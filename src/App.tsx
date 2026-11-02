@@ -58,13 +58,16 @@ function useFileDrop(onMessage: (m: string) => void) {
   const [dragging, setDragging] = useState(false)
   useEffect(() => {
     let depth = 0 // dragenter/dragleave fire for every child element
+    // While a dialog takes the drop itself (Import setup), the page ignores it, but still stops the browser opening the file.
+    const ownDrop = () => !!document.querySelector('[data-own-drop]')
     const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes('Files')
-    const enter = (e: DragEvent) => hasFiles(e) && ++depth && setDragging(true)
-    const leave = (e: DragEvent) => hasFiles(e) && --depth <= 0 && setDragging(false)
+    const enter = (e: DragEvent) => hasFiles(e) && !ownDrop() && ++depth && setDragging(true)
+    const leave = (e: DragEvent) => hasFiles(e) && !ownDrop() && --depth <= 0 && setDragging(false)
     const over = (e: DragEvent) => hasFiles(e) && e.preventDefault()
     const drop = async (e: DragEvent) => {
       if (!hasFiles(e)) return
       e.preventDefault()
+      if (ownDrop()) return
       depth = 0
       setDragging(false)
       // Folders are walked; a cfg only counts when dropped on its own, not from inside a folder.

@@ -1,8 +1,8 @@
 import type { HudDoc } from '../hud/cfg'
 import { parseRgb } from '../hud/colors'
 import { implFor, type Ctx, type Gfx, type TextColor } from '../hud/elements'
-import type { Placed } from '../hud/layout'
-import { CHARSET, getTexture } from './textures'
+import type { Placed, Rect } from '../hud/layout'
+import { CHARSET, getCrosshair, getTexture } from './textures'
 
 const BASE = import.meta.env.BASE_URL
 
@@ -122,6 +122,25 @@ function makeGfx(c: CanvasRenderingContext2D): RenderGfx {
   }
 }
 
+// crosshairimage (Draw_Crosshair): centred on the view, sized in real pixels by crosshairsize, tinted by crosshaircolor.
+function drawCrosshair(c: CanvasRenderingContext2D, view: Rect, kx: number, ky: number) {
+  const cross = getCrosshair()
+  const img = cross && load(cross.url)
+  if (!cross || !img || !cross.alpha || !cross.size) return
+  const [r, g, b] = parseRgb(cross.color) ?? [255, 0, 0]
+  const before = cross.size * (cross.w * 0.5 - 0.5)
+  const side = before + cross.size * (cross.h * 0.5 + 0.5)
+  c.globalAlpha = cross.alpha
+  c.drawImage(
+    r === 255 && g === 255 && b === 255 ? img : tint(img, `rgb(${r},${g},${b})`),
+    view.x + view.w / 2 - before / kx,
+    view.y + view.h / 2 - before / ky,
+    side / kx,
+    side / ky,
+  )
+  c.globalAlpha = 1
+}
+
 // Draws the HUD at canvas resolution. kx/ky = canvas pixels per virtual pixel; they differ
 // when vid_conwidth/conheight have another aspect ratio than the window (the game stretches too).
 export function drawHud(
@@ -133,10 +152,12 @@ export function drawHud(
   ky: number,
   isActive: (name: string) => boolean,
   showInactive: boolean,
+  view: Rect,
 ) {
   c.clearRect(0, 0, c.canvas.width, c.canvas.height)
   c.imageSmoothingEnabled = true
   c.setTransform(kx, 0, 0, ky, 0, 0)
+  drawCrosshair(c, view, kx, ky)
   const g = makeGfx(c)
   for (const placed of ordered) {
     if (!placed.draw) continue

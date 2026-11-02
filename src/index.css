@@ -1248,3 +1248,53 @@ button.primary:disabled {
   color: var(--dim);
   background: none;
 }
+
+/* ---------------------------------------------------------------- import setup */
+
+.setup-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 88px;
+  margin: 14px 0 4px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  color: var(--dim);
+}
+
+.setup-drop.over {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.modal ul.setup-result {
+  margin-top: 10px;
+}
+
+.setup-result.error {
+  color: #e06c5a;
+}
+
+.setup-success {
+  color: #5fd068;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.issues li .message {
+  flex: 1;
+}
+
+.issues li .issue-reset {
+  flex: none;
+  align-self: center;
+  padding: 0 8px;
+  font-size: 11px;
+}

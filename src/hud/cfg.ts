@@ -130,6 +130,19 @@ export function parseCfg(text: string): ParseResult {
   return result
 }
 
+// The last value the cfg gives each command or cvar (lower-case name), e.g. loadcharset, crosshairimage.
+// Keys are in the order of their last line, so of two that set the same thing the later one can be told apart.
+export function lastValues(text: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const tokens of tokenizeCommands(text)) {
+    const [name, value] = /^(set|seta|setu)$/i.test(tokens[0]) ? tokens.slice(1) : tokens
+    if (!name || value === undefined) continue
+    delete out[name.toLowerCase()]
+    out[name.toLowerCase()] = value
+  }
+  return out
+}
+
 const PAD = 36
 
 const pad2 = (n: number) => String(n).padStart(2, '0')

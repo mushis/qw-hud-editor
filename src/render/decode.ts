@@ -61,6 +61,31 @@ function fromPalette(pixels: Uint8Array, w: number, h: number, transparent: numb
   return { w, h, data }
 }
 
+// 8-bit RLE PCX with the 256-colour palette at the end (Image_LoadPCX_As32Bit); index 255 is transparent.
+export function decodePcx(buf: Uint8Array): Rgba {
+  if (buf[0] !== 0x0a || buf[2] !== 1 || buf[3] !== 8 || buf[buf.length - 769] !== 0x0c) throw new Error('unsupported PCX')
+  const w = u16(buf, 8) - u16(buf, 4) + 1
+  const h = u16(buf, 10) - u16(buf, 6) + 1
+  const stride = u16(buf, 66)
+  const palette = buf.subarray(buf.length - 768)
+  const data = new Uint8ClampedArray(w * h * 4)
+  let src = 128
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < stride && src < buf.length - 769; ) {
+      let c = buf[src++]
+      let run = 1
+      if ((c & 0xc0) === 0xc0) {
+        run = c & 0x3f
+        c = buf[src++]
+      }
+      for (; run > 0 && x < stride; run--, x++) {
+        if (x < w) data.set([palette[c * 3], palette[c * 3 + 1], palette[c * 3 + 2], c === 255 ? 0 : 255], (y * w + x) * 4)
+      }
+    }
+  }
+  return { w, h, data }
+}
+
 // WAD2 (gfx.wad): qpic lumps (status bar pictures) and the conchars charset.
 export function decodeWad(buf: Uint8Array): { name: string; image: Rgba }[] {
   if (String.fromCharCode(...buf.subarray(0, 4)) !== 'WAD2') throw new Error('not a WAD2 file')

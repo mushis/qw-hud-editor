@@ -2,10 +2,10 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ELEMENTS } from './catalog'
-import { parseCfg, serializeCfg, splitCvar } from './cfg'
+import { lastValues, parseCfg, serializeCfg, splitCvar } from './cfg'
 import { EZQUAKE_DEFAULTS, withDefaults } from './defaults'
 import { IMPLS, implFor } from './elements'
-import { decodeTga, decodeWad } from '../render/decode'
+import { decodePcx, decodeTga, decodeWad } from '../render/decode'
 import { texturePriority } from '../render/textures'
 import { findIssues } from './issues'
 import { frameExtents, layoutHud, screenFor, shouldShow, viewRect, wouldCycle } from './layout'
@@ -273,5 +273,29 @@ describe('settings in a cfg', () => {
       .filter((i) => /negative/.test(i.message))
       .map((i) => i.message)
       .sort()).toEqual(["digits can't be negative.", "scale can't be negative."])
+  })
+})
+
+describe('import setup', () => {
+  it('reads the last value of loadcharset and the crosshair cvars', () => {
+    const v = lastValues('loadcharset povo5\nseta crosshairimage "cross1" // mine\ncrosshairsize 2; crosshairsize 0.5\nhud_clock_show 1')
+    expect(v).toMatchObject({ loadcharset: 'povo5', crosshairimage: 'cross1', crosshairsize: '0.5' })
+    // Keys follow their last line: here gl_consolefont is set after loadcharset.
+    const keys = Object.keys(lastValues('gl_consolefont a\nloadcharset b\ngl_consolefont c'))
+    expect(keys).toEqual(['loadcharset', 'gl_consolefont'])
+  })
+
+  it('decodes an 8-bit RLE PCX, with index 255 transparent', () => {
+    // 2x1 image: colour 1, then colour 255 (written as a run of one, since it is above 0xbf), then the palette.
+    const head = new Uint8Array(128)
+    head.set([0x0a, 5, 1, 8])
+    head.set([1, 0], 8) // xmax 1 -> width 2
+    head.set([2, 0], 66) // bytes per line
+    const palette = new Uint8Array(768)
+    palette.set([10, 20, 30], 3) // colour 1
+    const pcx = new Uint8Array([...head, 0x01, 0xc1, 0xff, 0x0c, ...palette])
+    const img = decodePcx(pcx)
+    expect([img.w, img.h]).toEqual([2, 1])
+    expect([...img.data]).toEqual([10, 20, 30, 255, 0, 0, 0, 0])
   })
 })

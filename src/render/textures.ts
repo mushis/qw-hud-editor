@@ -4,9 +4,10 @@
 // names they share. Kept in IndexedDB so they survive reloads.
 import { create } from 'zustand'
 import { setCustomPictures, type Picture } from '../hud/pictures'
-import { decodeTga, decodeWad, toPng, unzip } from './decode'
+import { decodePcx, decodeTga, decodeWad, toPng, unzip } from './decode'
 
 export const CHARSET = '#charset'
+export const CROSSHAIR = '#crosshair'
 
 interface Stored {
   name: string
@@ -20,11 +21,23 @@ interface Row extends Stored {
   set: string
 }
 
+// Sets from "Import setup" have a kind; a newer set of the same kind replaces the older one.
+export type TextureKind = 'wad' | 'charset' | 'crosshair'
+
+// The crosshair cvars that change how crosshairimage is drawn.
+export interface CrosshairLook {
+  size: number // crosshairsize
+  color: string // crosshaircolor
+  alpha: number // crosshairalpha
+}
+
 export interface TextureSet {
   id: string
   label: string // what was loaded: a folder, a file, "a.png +3"
   created: number
   names: string[]
+  kind?: TextureKind
+  crosshair?: CrosshairLook
 }
 
 interface TextureState {
@@ -101,8 +114,8 @@ export async function loadSavedTextures() {
   }
 }
 
-async function addSet(label: string, list: Stored[]) {
-  const set: TextureSet = { id: crypto.randomUUID(), label, created: Date.now(), names: list.map((t) => t.name) }
+async function addSet(label: string, list: Stored[], extra: Pick<TextureSet, 'kind' | 'crosshair'> = {}) {
+  const set: TextureSet = { id: crypto.randomUUID(), label, created: Date.now(), names: list.map((t) => t.name), ...extra }
   const rows: Row[] = list.map((t) => ({ ...t, set: set.id, key: `${set.id}/${t.name}` }))
   rows.forEach(remember)
   rebuild([...useTextures.getState().sets, set])
@@ -149,9 +162,10 @@ export async function saveCustomBackground(file: Blob) {
 
 // ---------------------------------------------------------------- importing
 
-const IMAGE = /\.(png|tga|jpe?g|webp)$/i
+const IMAGE = /\.(png|tga|jpe?g|webp|pcx)$/i
 // Status bar pictures, as named in gfx.wad and textures/wad/.
 const HUD_PIC = /^(a?num_|face|inv|sb_|ibar|sbar|disc|net$|ram$|turtle$|backtile$)/
+export const isHudPicture = (name: string) => HUD_PIC.test(name)
 // Inside archives, other images only count in folders that look like HUD graphics.
 const HUD_FOLDER = /(^|\/)[^/]*(wad|gfx|hud|score|char)[^/]*\//i
 
@@ -169,8 +183,8 @@ async function fromImage(path: string, data: Uint8Array): Promise<Stored | null>
   let blob: Blob
   let w: number
   let h: number
-  if (/\.tga$/i.test(path)) {
-    const img = decodeTga(data)
+  if (/\.(tga|pcx)$/i.test(path)) {
+    const img = /\.tga$/i.test(path) ? decodeTga(data) : decodePcx(data)
     blob = await toPng(img)
     w = img.w
     h = img.h
@@ -270,4 +284,24 @@ export async function droppedFiles(dt: DataTransfer): Promise<PathFile[]> {
   }
   for (const entry of entries) await walk(entry, '')
   return out
+}
+
+// Replaces the set of this kind (if any) with these files. Charset and crosshair take one file each.
+export async function importKind(kind: TextureKind, label: string, files: PathFile[], crosshair?: CrosshairLook): Promise<string[]> {
+  const list: Stored[] = []
+  for (const { path, file } of files) {
+    const tex = await fromImage(path, new Uint8Array(await file.arrayBuffer()))
+    if (tex) list.push(kind === 'wad' ? tex : { ...tex, name: kind === 'charset' ? CHARSET : CROSSHAIR })
+  }
+  if (!list.length) return []
+  for (const old of useTextures.getState().sets.filter((s) => s.kind === kind)) await removeTextureSet(old.id)
+  await addSet(label, list, { kind, crosshair })
+  return list.map((t) => t.name)
+}
+
+// The crosshairimage picture and how to draw it, when the setup import found one.
+export function getCrosshair(): (Picture & CrosshairLook) | null {
+  const pic = getTexture(CROSSHAIR)
+  const look = useTextures.getState().sets.find((s) => s.kind === 'crosshair')?.crosshair
+  return pic && look ? { ...pic, ...look } : null
 }
