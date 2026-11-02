@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { parseRgb, type Rgba } from '../hud/colors'
 import QUAKE_PALETTE from '../hud/quake-palette.json'
 
@@ -50,12 +50,20 @@ function stepValue(value: string, step: number, dir: number): string {
   return String(parseFloat((n + dir * step).toFixed(places)))
 }
 
-// Number with ▲▼ buttons; ArrowUp/ArrowDown in the box step too (Shift = ×10).
-export function NumberField({ param, value, onCommit }: { param: string; value: string; onCommit: (v: string) => void }) {
+// Number with ▲▼ buttons; ArrowUp/ArrowDown in the box step too (Shift = ×10). Values below min become min.
+export function NumberField({ param, value, min = -Infinity, onCommit }: { param: string; value: string; min?: number; onCommit: (v: string) => void }) {
   const [draft, setDraft] = useState(value)
   const step = stepFor(param)
-  const commit = () => draft !== value && onCommit(draft)
-  const bump = (dir: number, big = false) => onCommit(stepValue(value, big ? step * 10 : step, dir))
+  const clamp = (v: string) => (parseFloat(v) < min ? String(min) : v)
+  const commit = () => {
+    const v = clamp(draft)
+    if (v !== draft) setDraft(v)
+    if (v !== value) onCommit(v)
+  }
+  const bump = (dir: number, big = false) => {
+    const v = clamp(stepValue(value, big ? step * 10 : step, dir))
+    if (v !== value) onCommit(v)
+  }
   return (
     <div className="num-field">
       <input
@@ -268,6 +276,118 @@ export function ColorField({ value, palette, onOpen, onLive, onCommit }: ColorPr
             </>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- checkbox
+
+// 0/1 setting.
+export function Checkbox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const on = (parseFloat(value) || 0) !== 0
+  return <input type="checkbox" className="check-field" checked={on} onChange={(e) => onChange(e.target.checked ? '1' : '0')} />
+}
+
+// ---------------------------------------------------------------- combobox
+
+export interface ComboOption {
+  value: string
+  label: string
+  group: string
+}
+
+// Text box with a filtered list of suggestions. Typing filters by value or label; arrows move,
+// Enter picks the highlighted one (or keeps what was typed), Escape gives up.
+export function Combobox({ value, options, onChange }: { value: string; options: ComboOption[]; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const [active, setActive] = useState(0)
+  const ref = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+
+  // Show the new value when it changes from outside (undo, another element selected).
+  const [shownValue, setShownValue] = useState(value)
+  if (shownValue !== value) {
+    setShownValue(value)
+    setDraft(value)
+  }
+  useEffect(() => {
+    if (!open) return
+    const close = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return
+      setOpen(false)
+      setDraft(value)
+    }
+    window.addEventListener('pointerdown', close)
+    return () => window.removeEventListener('pointerdown', close)
+  }, [open, value])
+  useEffect(() => {
+    listRef.current?.querySelector('.active')?.scrollIntoView({ block: 'nearest' })
+  }, [active, open])
+
+  // The whole list while the box still shows the current value; a filter once something is typed.
+  const q = draft === value ? '' : draft.trim().toLowerCase()
+  const shown = q ? options.filter((o) => o.value.toLowerCase().includes(q) || o.label.toLowerCase().includes(q)) : options
+  const pick = (v: string) => {
+    setOpen(false)
+    setDraft(v)
+    if (v !== value) onChange(v)
+  }
+  const show = () => {
+    setOpen(true)
+    setActive(Math.max(0, options.findIndex((o) => o.value === value)))
+  }
+
+  return (
+    <div className="combo" ref={ref}>
+      <input
+        value={draft}
+        onFocus={(e) => {
+          e.target.select()
+          show()
+        }}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          setOpen(true)
+          setActive(0)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            if (!open) return show()
+            const n = shown.length
+            if (n) setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : -1) + n) % n)
+          } else if (e.key === 'Enter') {
+            pick(open && shown[active] ? shown[active].value : draft.trim())
+          } else if (e.key === 'Escape') {
+            e.stopPropagation()
+            setOpen(false)
+            setDraft(value)
+          } else if (e.key === 'Tab') setOpen(false)
+        }}
+      />
+      <button tabIndex={-1} className="combo-toggle" title="Show the choices" onClick={() => (open ? setOpen(false) : show())}>
+        ▾
+      </button>
+      {open && (
+        <ul className="combo-list" ref={listRef}>
+          {shown.map((o, i) => (
+            <Fragment key={o.value}>
+              {(i === 0 || shown[i - 1].group !== o.group) && <li className="combo-group">{o.group}</li>}
+              <li
+                className={i === active ? 'active' : o.value === value ? 'current' : undefined}
+                title={o.label}
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => pick(o.value)}
+                onPointerEnter={() => setActive(i)}
+              >
+                {o.value}
+              </li>
+            </Fragment>
+          ))}
+          {!shown.length && <li className="none">No match. Enter keeps “{draft.trim()}”.</li>}
+        </ul>
       )}
     </div>
   )

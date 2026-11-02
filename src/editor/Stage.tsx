@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { offscreen } from '../hud/issues'
 import type { Placed } from '../hud/layout'
 import { drawHud, setAssetListener } from '../render/renderer'
-import { CUSTOM_BACKGROUND, useCustomBackground } from '../render/textures'
+import { CUSTOM_BACKGROUND, useCustomBackground, useTextures } from '../render/textures'
 import { useStore } from '../store'
 import { useHudLayout } from './useHudLayout'
 
@@ -37,6 +37,7 @@ export function Stage() {
   const selected = useStore((s) => s.selected)
   const customBackground = useCustomBackground((s) => s.url)
   const background = settings.background === CUSTOM_BACKGROUND ? customBackground : settings.background
+  const backtile = useTextures((s) => s.textures.backtile?.url) ?? `${import.meta.env.BASE_URL}assets/wad/backtile.png`
   const { select, checkpoint, setParams, setSettings } = useStore.getState()
 
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -83,6 +84,11 @@ export function Stage() {
     // only when the zoom level changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom])
+
+  // Below viewsize 100 the 3D view is smaller and centred, with backtile around it (SCR_TileClear).
+  const v = screen.view
+  const smallView = v.w < screen.width || v.h < screen.height
+  const viewBox = { left: v.x * kx, top: v.y * ky, width: v.w * kx, height: v.h * ky }
 
   const visible = ordered.filter((p) => settings.showInactive || isActive(p.name))
   const status = new Map(visible.filter((p) => p.draw).map((p) => [p.name, offscreen(p, screen)]))
@@ -172,7 +178,9 @@ export function Stage() {
     <div className="stage-area">
       <div className={`stage-wrap${zoom > 1 ? ' zoomed' : ''}`} ref={wrapRef}>
         <div className="stage" style={{ width: cssWidth, height: cssHeight }}>
-          {background && <img className="stage-bg" src={background} alt="" draggable={false} />}
+          {smallView && <div className="stage-backtile" style={{ backgroundImage: `url(${backtile})`, backgroundSize: `${64 * kx}px ${64 * ky}px` }} />}
+          {smallView && <div className="stage-view" style={viewBox} />}
+          {background && <img className="stage-bg" src={background} alt="" draggable={false} style={smallView ? viewBox : undefined} />}
           <canvas ref={canvasRef} width={settings.width} height={settings.height} />
           <div
             className={`stage-overlay${hovered ? ' over' : ''}`}

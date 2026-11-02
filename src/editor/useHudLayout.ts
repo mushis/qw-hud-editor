@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { ELEMENT_BY_NAME, ELEMENTS, isActiveIn } from '../hud/catalog'
 import { implFor, type Ctx } from '../hud/elements'
-import { drawOrder, layoutHud, sbLinesForViewsize, type Screen } from '../hud/layout'
+import { drawOrder, layoutHud, screenFor } from '../hud/layout'
 import { useTextures } from '../render/textures'
 import { useStore, virtualSize } from '../store'
 
@@ -14,7 +14,8 @@ export function useHudLayout() {
   const textures = useTextures((s) => s.version) // group pictures can change sizes (pic_scalemode 3)
 
   return useMemo(() => {
-    const screen: Screen = { ...virtualSize(settings), sbLines: sbLinesForViewsize(settings.viewsize) }
+    const { width, height } = virtualSize(settings)
+    const screen = screenFor(width, height, settings.viewsize)
     const ctx: Ctx = { preview, screenW: screen.width, screenH: screen.height }
     const placed = layoutHud(doc, screen, (name, p) => implFor(name).size(p, ctx))
     const ordered = drawOrder(placed, REGISTRATION)

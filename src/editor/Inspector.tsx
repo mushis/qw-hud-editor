@@ -2,17 +2,15 @@ import { useState } from 'react'
 import { ELEMENT_BY_NAME, ELEMENTS } from '../hud/catalog'
 import { DEFAULTS_SOURCE, defaultValue, EZQUAKE_DEFAULTS } from '../hud/defaults'
 import { isColorParam, isPaletteColor } from '../hud/colors'
-import { invalidReason } from '../hud/issues'
+import { invalidReason, minValue, TEXT_PARAMS } from '../hud/issues'
 import { ALIGN_X, ALIGN_Y, SCREEN_AREAS, wouldCycle } from '../hud/layout'
 import { useStore } from '../store'
 import { CopyFrom } from './CopyFrom'
-import { ColorField, NumberField, Select, SliderField, TextField } from './fields'
+import { Checkbox, ColorField, Combobox, NumberField, Select, SliderField, TextField, type ComboOption } from './fields'
 import { useHudLayout } from './useHudLayout'
 
 const COMMON = ['show', 'draw', 'place', 'align_x', 'align_y', 'pos_x', 'pos_y', 'order', 'frame', 'frame_color', 'item_opacity']
 
-// Values that look numeric but are free text.
-const TEXT_PARAMS = /format|layout|text$|filter|^name$|picture/
 const NUMERIC = /^-?(\d+\.?\d*|\.\d+)$/
 
 // Digit alignment inside a number element's box.
@@ -68,12 +66,13 @@ export function Inspector() {
   const box = placed.get(selected)
   const set = (param: string, value: string) => editParams(selected, { [param]: value })
 
-  const placeOptions: [string, string][] = [
-    ...SCREEN_AREAS.map((a): [string, string] => [a, `screen area: ${a}`]),
-    ...ELEMENTS.filter((e) => e.name !== selected && doc.elements[e.name]).flatMap((e): [string, string][] => [
-      [e.name, `outside ${e.name}`],
-      [`@${e.name}`, `inside ${e.name}`],
-    ]),
+  const others = ELEMENTS.map((e) => e.name)
+    .filter((n) => n !== selected && doc.elements[n])
+    .sort()
+  const placeOptions: ComboOption[] = [
+    ...SCREEN_AREAS.map((a) => ({ value: a, label: `screen area: ${a}`, group: 'Screen areas' })),
+    ...others.map((n) => ({ value: n, label: `next to ${n} (align before/after to sit beside it)`, group: 'Next to an element' })),
+    ...others.map((n) => ({ value: `@${n}`, label: `inside ${n}`, group: 'Inside an element (@)' })),
   ]
   // A place that would point at the element itself or make a loop (both disappear in game).
   const placeProblem = (value: string) => {
@@ -114,7 +113,9 @@ export function Inspector() {
       case 'draw':
         return <Select value={value} options={SHOW_OPTIONS} onChange={(v) => set(param, v)} />
       case 'place':
-        return <Select value={value} options={placeOptions} onChange={onPlace} />
+        return <Combobox value={value} options={placeOptions} onChange={onPlace} />
+      case 'proportional':
+        return <Checkbox value={value} onChange={(v) => set(param, v)} />
       case 'align_x':
         return <Select value={value} options={ALIGN_X.map((a) => [a, a])} onChange={(v) => set(param, v)} />
       case 'align_y':
@@ -134,7 +135,7 @@ export function Inspector() {
           step={step}
           onStart={checkpoint}
           onLive={(v) => setParams(selected, { [param]: v })}
-          onCommit={(v) => set(param, v)}
+          onCommit={(v) => set(param, String(Math.max(min, parseFloat(v) || 0)))}
         />
       )
     }
@@ -152,7 +153,7 @@ export function Inspector() {
       )
     }
     if (NUMERIC.test(value) && !TEXT_PARAMS.test(param)) {
-      return <NumberField key={key} param={param} value={value} onCommit={(v) => set(param, v)} />
+      return <NumberField key={key} param={param} value={value} min={minValue(param)} onCommit={(v) => set(param, v)} />
     }
     return <TextField key={key} value={value} onCommit={(v) => set(param, v)} />
   }

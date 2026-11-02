@@ -27,6 +27,16 @@ export function offscreen({ outer: o }: Placed, screen: Screen): { edges: Edge[]
   return { edges, hidden }
 }
 
+// Settings ezQuake takes below 0: positions, draw order, the game clock offset and the frags cell spacing.
+// Everything else is a size, count, style or colour.
+const NEGATIVE_OK = new Set(['pos_x', 'pos_y', 'order', 'offset', 'space_x', 'space_y'])
+// Values that look numeric but are free text.
+export const TEXT_PARAMS = /format|layout|text$|filter|^name$|picture/
+const NUMBER = /^\s*-?(\d+\.?\d*|\.\d+)\s*$/
+
+// Lowest value a setting takes (-Infinity when it may be negative).
+export const minValue = (param: string) => (NEGATIVE_OK.has(param) || TEXT_PARAMS.test(param) ? -Infinity : 0)
+
 const isOneOf = (list: readonly string[], value: string) => list.includes(value.toLowerCase())
 
 // Why a place / align_x / align_y value is invalid, or null. ezQuake (HUD_FindPlace, HUD_FindAlignX/Y)
@@ -47,6 +57,7 @@ export function invalidReason(doc: HudDoc, element: string, param: string): stri
     case 'align_y':
       return isOneOf(ALIGN_Y, value) ? null : `align_y "${value}" is not valid: the game uses "top".`
   }
+  if (NUMBER.test(value) && parseFloat(value) < minValue(param)) return `${param} can't be negative.`
   return null
 }
 
@@ -57,7 +68,7 @@ export function findIssues(doc: HudDoc, placed: Map<string, Placed>, screen: Scr
     if (!p || !shouldShow(p.show)) continue
     const add = (severity: Severity, message: string) => issues.push({ element: name, severity, message })
 
-    for (const param of ['place', 'align_x', 'align_y']) {
+    for (const param of Object.keys(p)) {
       const reason = invalidReason(doc, name, param)
       if (reason) add('warning', reason)
     }

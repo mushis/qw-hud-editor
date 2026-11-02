@@ -90,15 +90,31 @@ for (const file of WAD_FILES) {
   console.log('wad', name)
 }
 
-// Quake palette (gfx/palette.lmp in the shareware pak0.pak) for cvars that take a palette index.
+// From the shareware pak0.pak: the Quake palette (gfx/palette.lmp) for cvars that take a palette index,
+// and backtile from gfx.wad, drawn around the view when viewsize is below 100.
 const pak = await download('qsw106/ID1/PAK0.PAK')
+const pakFiles = new Map()
 for (let i = 0, dir = pak.readUInt32LE(4), n = pak.readUInt32LE(8) / 64; i < n; i++) {
   const entry = dir + i * 64
-  if (pak.toString('latin1', entry, entry + 56).replace(/\0.*$/s, '') !== 'gfx/palette.lmp') continue
-  const lmp = pak.subarray(pak.readUInt32LE(entry + 56), pak.readUInt32LE(entry + 56) + 768)
-  const hex = Array.from({ length: 256 }, (_, c) => '#' + lmp.subarray(c * 3, c * 3 + 3).toString('hex'))
-  await writeFile(join(ROOT, 'src/hud/quake-palette.json'), JSON.stringify(hex) + '\n')
-  console.log('palette quake-palette.json')
+  const offset = pak.readUInt32LE(entry + 56)
+  pakFiles.set(pak.toString('latin1', entry, entry + 56).replace(/\0.*$/s, ''), pak.subarray(offset, offset + pak.readUInt32LE(entry + 60)))
+}
+const lmp = pakFiles.get('gfx/palette.lmp')
+const hex = Array.from({ length: 256 }, (_, c) => '#' + lmp.subarray(c * 3, c * 3 + 3).toString('hex'))
+await writeFile(join(ROOT, 'src/hud/quake-palette.json'), JSON.stringify(hex) + '\n')
+console.log('palette quake-palette.json')
+const wad = pakFiles.get('gfx.wad')
+for (let i = 0, n = wad.readUInt32LE(4), dir = wad.readUInt32LE(8); i < n; i++) {
+  const entry = dir + i * 32
+  if (wad.toString('latin1', entry + 16, entry + 32).replace(/\0.*$/s, '').toLowerCase() !== 'backtile') continue
+  const offset = wad.readUInt32LE(entry)
+  const png = new PNG({ width: wad.readUInt32LE(offset), height: wad.readUInt32LE(offset + 4) })
+  for (let k = 0; k < png.width * png.height; k++) {
+    const c = wad[offset + 8 + k]
+    png.data.set([lmp[c * 3], lmp[c * 3 + 1], lmp[c * 3 + 2], 255], k * 4)
+  }
+  await writeFile(join(WAD_OUT, 'backtile.png'), PNG.sync.write(png))
+  console.log('wad backtile.png')
 }
 
 const pk3 = readZip(await download('gpl/ezquake/ezquake.pk3'))

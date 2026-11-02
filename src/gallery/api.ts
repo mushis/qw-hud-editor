@@ -190,3 +190,22 @@ export async function adminDeleteAll(): Promise<number> {
   await refresh()
   return n
 }
+
+// ---------------------------------------------------------------- visitor counter
+
+const VISITED_KEY = 'qw-hud-editor:visited'
+
+// Distinct visitors: a browser counts itself the first time, then only reads the total.
+// Null when there is no gallery or the counter isn't set up (supabase/migrations/20261103_visits.sql).
+export const useVisitors = create<{ total: number | null }>(() => ({ total: null }))
+let visitorsLoaded = false
+
+export async function loadVisitors() {
+  if (!db || visitorsLoaded) return
+  visitorsLoaded = true
+  const first = !storage.get(VISITED_KEY)
+  const { data, error } = await db.rpc(first ? 'count_visitor' : 'visitor_count')
+  if (error || typeof data !== 'number') return
+  if (first) storage.set(VISITED_KEY, '1')
+  useVisitors.setState({ total: data })
+}

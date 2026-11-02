@@ -8,7 +8,7 @@ import { Issues } from './editor/Issues'
 import { Palette } from './editor/Palette'
 import { Stage } from './editor/Stage'
 import { Toolbar } from './editor/Toolbar'
-import { useGallery } from './gallery/api'
+import { loadVisitors, useGallery } from './gallery/api'
 import { droppedFiles, isTextureFile, loadCustomBackground, loadSavedTextures } from './render/textures'
 import { hasSavedDoc, useStore } from './store'
 
@@ -104,6 +104,7 @@ export default function App() {
     loadSavedTextures()
     loadCustomBackground()
     useGallery.getState().refresh()
+    loadVisitors()
   }, [])
 
   // First visit: start from the nQuake default HUD.

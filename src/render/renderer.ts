@@ -36,6 +36,27 @@ const TTF = 'Arial, Helvetica, sans-serif'
 const TTF_COLORS: Record<TextColor, string> = { white: '#f2f2f2', alt: '#d08c48', gold: '#e8c040' }
 const BIG_GLYPHS: Record<string, string> = { colon: ':', minus: '-', slash: '/' }
 
+// &cRGB text: ezQuake multiplies the charset by the colour. One tinted copy per charset and colour.
+const tinted = new Map<string, HTMLCanvasElement>()
+function tint(img: HTMLImageElement, color: string): HTMLCanvasElement {
+  const key = `${img.src}|${color}`
+  let canvas = tinted.get(key)
+  if (!canvas) {
+    canvas = document.createElement('canvas')
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
+    const t = canvas.getContext('2d')!
+    t.drawImage(img, 0, 0)
+    t.globalCompositeOperation = 'multiply'
+    t.fillStyle = color
+    t.fillRect(0, 0, canvas.width, canvas.height)
+    t.globalCompositeOperation = 'destination-in'
+    t.drawImage(img, 0, 0)
+    tinted.set(key, canvas)
+  }
+  return canvas
+}
+
 interface RenderGfx extends Gfx {
   proportional: boolean
 }
@@ -61,20 +82,22 @@ function makeGfx(c: CanvasRenderingContext2D): RenderGfx {
       const img = custom ? load(custom.url) : image(`assets/wad/${name}.png`)
       if (img) c.drawImage(img, x * k, y * k, w * k, h * k)
     },
-    text(s, x, y, scale, color: TextColor = 'white') {
+    text(s, x, y, scale, color: TextColor | string = 'white') {
+      const named = color === 'white' || color === 'alt' || color === 'gold'
       if (this.proportional) {
         c.save()
         c.font = `${8 * scale * k}px ${TTF}`
         c.textBaseline = 'top'
-        c.fillStyle = TTF_COLORS[color]
+        c.fillStyle = named ? TTF_COLORS[color as TextColor] : color
         c.fillText(s, x * k, y * k)
         c.restore()
         return
       }
       const custom = getTexture(CHARSET)
-      const charset = custom ? load(custom.url) : image('assets/charsets/povo5.png')
-      if (!charset) return
-      const cell = charset.naturalWidth / 16
+      const plain = custom ? load(custom.url) : image('assets/charsets/povo5.png')
+      if (!plain) return
+      const charset = named ? plain : tint(plain, color)
+      const cell = plain.naturalWidth / 16
       const size = 8 * scale * k
       for (let i = 0; i < s.length; i++) {
         let code = s.charCodeAt(i) & 0xff

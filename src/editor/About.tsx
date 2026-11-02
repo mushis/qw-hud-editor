@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import logo from '../assets/brand/logo-320.jpg'
 import { AdminPanel } from '../gallery/AdminPanel'
-import { galleryEnabled } from '../gallery/api'
+import { galleryEnabled, useVisitors } from '../gallery/api'
 import { Modal } from './Modal'
 
 // Double-clicking the logo opens the admin panel (sign-in by e-mail link).
 export function About({ onClose, admin: startAdmin = false }: { onClose: () => void; admin?: boolean }) {
   const [admin, setAdmin] = useState(startAdmin)
+  const visitors = useVisitors((s) => s.total)
 
   return (
     <Modal label="About" onClose={onClose} wide>
@@ -18,6 +19,11 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
         height={160}
         onDoubleClick={() => galleryEnabled && setAdmin(true)}
       />
+      {visitors !== null && (
+        <p className="about-visitors" title="Counted once per browser">
+          {visitors.toLocaleString('en-US')} {visitors === 1 ? 'visitor' : 'visitors'}
+        </p>
+      )}
       {admin && <AdminPanel />}
       <p>
         Edits the ezQuake HUD (<code>scr_newhud 1</code>). The HUD is a set of <code>hud_&lt;element&gt;_&lt;setting&gt;</code> cvars, and
@@ -68,7 +74,8 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
           The panel on the right edits every setting of the selected element. Settings that differ from the ezQuake default are highlighted
           and ↺ resets one; invalid values are in red. <b>Reset</b> sets the whole element back to its defaults, and <b>Copy from…</b>{' '}
           copies the settings it shares with another element (all but whether it is shown). Number boxes step with ▲▼ or the arrow keys
-          (Shift = ×10); colours have a picker and one box per channel.
+          (Shift = ×10) and stop at 0, except positions, <code>order</code>, the game clock <code>offset</code> and the frags
+          spacing, which ezQuake takes below 0. Colours have a picker and one box per channel.
         </li>
         <li>
           <b>View as</b> previews the HUD as a player, a spectator or in a demo. Elements that don't show in that view are in italics in the
@@ -106,7 +113,8 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
         <dt>viewsize</dt>
         <dd>
           The status bar height used by the <code>sbar</code>, <code>ibar</code> and <code>hbar</code> places (and their <code>*free</code>{' '}
-          counterparts): 48 pixels at 100, 24 at 110, none at 120.
+          counterparts): 48 pixels at 100, 24 at 110, none at 120. Below 100 the 3D view shrinks and is centred above the status bar,
+          with the backtile pattern around it; the <code>view</code> place shrinks with it, the others don't.
         </dd>
       </dl>
 

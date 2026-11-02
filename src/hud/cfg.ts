@@ -122,7 +122,7 @@ export function parseCfg(text: string): ParseResult {
     } else if (key.startsWith('hud_') || key === 'scr_newhud') {
       result.doc.globals[key] = value
     } else if (client && Number.isFinite(n) && n >= 0) {
-      result.client[client[0]] = n
+      result.client[client[0]] = client[0] === 'viewsize' ? Math.min(120, Math.max(30, n)) : n // SCR_CalcRefdef bounds viewsize
     } else {
       result.ignored++
     }

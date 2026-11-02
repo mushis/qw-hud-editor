@@ -5,13 +5,15 @@ import type { Params } from './cfg'
 import type { Rect, Size } from './layout'
 import { findPicture, pictureName } from './pictures'
 import { activeAmmo, PLAYERS, type Preview } from './preview'
+import QUAKE_PALETTE from './quake-palette.json'
+import { colorRuns, parseFunChars, TP_NAMES, visibleLength, type Run } from './text'
 
 export type TextColor = 'white' | 'alt' | 'gold'
 
 // Everything is in virtual console pixels; the renderer scales to the canvas.
 export interface Gfx {
   pic(name: string, x: number, y: number, w: number, h: number): void
-  text(s: string, x: number, y: number, scale: number, color?: TextColor): void
+  text(s: string, x: number, y: number, scale: number, color?: TextColor | string): void // a string is a "#rgb" tint
   fill(x: number, y: number, w: number, h: number, color: string): void
   // Source rectangle (sx, sy, sw, sh) of an image url, drawn into (dx, dy, dw, dh).
   image(url: string, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number, alpha: number): void
@@ -35,8 +37,35 @@ const num = (v: string | undefined, fallback = 0) => {
 const int = (v: string | undefined, fallback = 0) => Math.trunc(num(v, fallback))
 const scaleOf = (p: Params) => num(p.scale, 1)
 
-// Strips ezQuake text markup: &cRGB colours, &r reset, $[ $] brackets.
-export const stripMarkup = (s: string) => s.replace(/&c[0-9a-fA-F]{3}/g, '').replace(/&r/g, '').replace(/\$\[|\$\]/g, '')
+// Draws text with &cRGB colours (fun chars already parsed); returns the width drawn.
+function drawRuns(g: Gfx, runs: Run[], x: number, y: number, scale: number, base: TextColor = 'white'): number {
+  let cx = x
+  for (const run of runs) {
+    g.text(run.text, cx, y, scale, run.color ?? base)
+    cx += run.text.length * 8 * scale
+  }
+  return cx - x
+}
+const rich = (g: Gfx, s: string, x: number, y: number, scale: number, base?: TextColor) => drawRuns(g, colorRuns(s), x, y, scale, base)
+
+// The first n visible characters.
+function cutRuns(runs: Run[], n: number): Run[] {
+  const out: Run[] = []
+  for (const run of runs) {
+    if (n <= 0) break
+    out.push({ ...run, text: run.text.slice(0, n) })
+    n -= run.text.length
+  }
+  return out
+}
+
+// Draw_SStringAligned: text in a box of `width` pixels from x, cut to fit.
+function aligned(g: Gfx, s: string, x: number, y: number, scale: number, align: 'left' | 'center' | 'right', width: number) {
+  const runs = cutRuns(colorRuns(s), Math.floor(width / (8 * scale) + 1e-6))
+  const used = runs.reduce((n, r) => n + r.text.length, 0) * 8 * scale
+  const dx = align === 'right' ? width - used : align === 'center' ? (width - used) / 2 : 0
+  drawRuns(g, runs, x + dx, y, scale)
+}
 
 const textSize = (s: string, scale: number, lines = 1): Size => ({ w: s.length * 8 * scale, h: 8 * scale * lines })
 
@@ -138,20 +167,21 @@ function gunImpl(weapon: (ctx: Ctx) => number): ElementImpl {
 
 // ---------------------------------------------------------------- text
 
+// Lines of text; &cRGB colours are drawn, fun chars ($[, $x10...) are parsed.
 function textImpl(text: (p: Params, ctx: Ctx) => string | string[], color: TextColor = 'white'): ElementImpl {
   const lines = (p: Params, ctx: Ctx) => {
     const t = text(p, ctx)
-    return (Array.isArray(t) ? t : [t]).map(stripMarkup)
+    return (Array.isArray(t) ? t : [t]).map(parseFunChars)
   }
   return {
     size(p, ctx) {
       const l = lines(p, ctx)
-      const longest = Math.max(0, ...l.map((s) => s.length))
+      const longest = Math.max(0, ...l.map(visibleLength))
       return { w: longest * 8 * scaleOf(p), h: l.length * 8 * scaleOf(p) }
     },
     draw(g, p, ctx, r) {
       const s = scaleOf(p)
-      lines(p, ctx).forEach((line, i) => g.text(line, r.x, r.y + i * 8 * s, s, color))
+      lines(p, ctx).forEach((line, i) => rich(g, line, r.x, r.y + i * 8 * s, s, color))
     },
   }
 }
@@ -347,6 +377,354 @@ const clockFormats = [
   () => `${pad2(now.getHours())}:${pad2(now.getMinutes())}`,
 ]
 
+// ---------------------------------------------------------------- formatted elements
+
+const BEST_AMMO = ['', '', 'shells', 'shells', 'nails', 'nails', 'rockets', 'rockets', 'cells']
+
+// Teammates shown by teaminfo.
+interface Mate {
+  name: string
+  loc: string
+  health: number
+  armor: number
+  armorType: 0 | 1 | 2 | 3
+  weapons: number[] // 2..8
+  ammo: Record<string, number>
+  powerups: string[]
+  frags: number
+}
+const MATES: Mate[] = [
+  { name: 'Ranger', loc: 'ra', health: 150, armor: 200, armorType: 3, weapons: [7, 8], ammo: { cells: 60, rockets: 25 }, powerups: ['quad'], frags: 31 },
+  { name: 'Fiend', loc: 'mega', health: 20, armor: 30, armorType: 1, weapons: [7], ammo: { rockets: 4 }, powerups: [], frags: 23 },
+  { name: 'Shambler', loc: 'quad', health: 100, armor: 95, armorType: 2, weapons: [8], ammo: { cells: 80 }, powerups: ['ring'], frags: 0 },
+  { name: 'Knight', loc: 'gl', health: 100, armor: 0, armorType: 0, weapons: [2], ammo: { shells: 25 }, powerups: [], frags: 4 },
+]
+
+// SCR_HudDrawTeamInfoPlayer (hud_teaminfo.c): parses the layout and draws one row; returns its width.
+function teaminfoRow(g: Gfx | null, p: Params, m: Mate, index: number, x0: number, y: number, maxname: number, maxloc: number): number {
+  const s = num(p.scale, 1)
+  const fw = 8 * s
+  const layout = parseFunChars(p.layout ?? '')
+  const best = Math.max(...m.weapons)
+  const ammo = m.ammo[BEST_AMMO[best]] ?? 0
+  const weaponStyle = int(p.weapon_style)
+  const showAmmo = int(p.show_ammo) !== 0
+  const armorStyle = int(p.armor_style, 3)
+  const powerupStyle = int(p.powerup_style, 1)
+  let x = x0
+  const put = (t: string, width: number, align: 'left' | 'right') => {
+    if (g) aligned(g, t, x, y, s, align, width)
+    x += width
+  }
+  for (let i = 0; i < layout.length; i++) {
+    if (layout[i] !== '%') {
+      if (g && layout[i] !== ' ') g.text(layout[i], x, y, s)
+      x += fw
+      continue
+    }
+    const code = layout[++i]
+    switch (code) {
+      case 'n':
+        put(m.name, maxname * fw, 'right')
+        break
+      case 'w':
+      case 'W':
+        if (weaponStyle === 1) {
+          const name = m.weapons.includes(7) && m.weapons.includes(8) ? TP_NAMES.rlg : TP_NAMES[WEAPON_TP[best]]
+          put(name, 3 * fw, code === 'W' || showAmmo ? 'right' : 'left')
+        } else {
+          // the weapon's status bar picture at half size
+          if (g) g.pic(`inv_${WEAPON_PICS[best]}`, x, y, 12 * s, 8 * s)
+          x += 2 * fw
+        }
+        if (showAmmo) put(`:${ammo}`, 4 * fw, 'left')
+        break
+      case 'k':
+      case 'K':
+        put(String(ammo), 3 * fw, 'left')
+        break
+      case 'r':
+      case 'R':
+        x += 2 * fw // respawn time: nobody is dead
+        break
+      case 'h':
+      case 'H':
+        put(`${m.health < int(p.low_health, 25) ? '&cf00' : ''}${m.health}`, 3 * fw, code === 'h' ? 'right' : 'left')
+        break
+      case 'f':
+      case 'F':
+        put(String(m.frags), 3 * fw, code === 'f' ? 'right' : 'left')
+        break
+      case 'a':
+      case 'A': {
+        let color = ''
+        if (armorStyle === 1) {
+          if (g && m.armorType) g.pic(`sb_armor${m.armorType}`, x, y, 8 * s, 8 * s)
+          x += fw
+        } else if (armorStyle === 3) color = ['', '&c0f0', '&cff0', '&cf00'][m.armorType]
+        else if (armorStyle === 4) {
+          if (g && m.armorType) g.text('gyr'[m.armorType - 1], x, y, s)
+          x += fw
+        }
+        put(`${color}${m.armor}`, 3 * fw, code === 'A' ? 'left' : 'right')
+        break
+      }
+      case 'l':
+        put(m.loc, maxloc * fw, 'right')
+        break
+      case 'p': {
+        if (powerupStyle < 1 || powerupStyle > 3) break
+        const pics = powerupStyle === 1 ? ['sb_quad', 'sb_invuln', 'sb_invis'] : ['face_quad', 'face_invul2', 'face_invis']
+        ;['quad', 'pent', 'ring'].forEach((item, k) => {
+          if (g && m.powerups.includes(item)) {
+            if (powerupStyle === 3) rich(g, ['&c03fQ', '&cf00P', '&cff0R'][k], x, y, s)
+            else g.pic(pics[k], x, y, 8 * s, 8 * s)
+          }
+          x += fw
+        })
+        break
+      }
+      case 't':
+        put(String(index + 1), fw, 'left')
+        break
+      case 'c':
+        x += fw // nobody carries a flag
+        break
+      case '%':
+        put('%', fw, 'left')
+        break
+      default:
+        put(`%${code ?? ''}`, (code ? 2 : 1) * fw, 'left')
+    }
+  }
+  return x - x0
+}
+
+const teaminfoNames = (p: Params) => ({
+  maxname: Math.max(0, Math.min(Math.max(...MATES.map((m) => m.name.length)), int(p.name_width, 6))),
+  maxloc: Math.max(0, Math.min(100, int(p.loc_width, 5))),
+})
+
+const teaminfoImpl = boxImpl(
+  (p) => {
+    const { maxname, maxloc } = teaminfoNames(p)
+    return { w: teaminfoRow(null, p, MATES[0], 0, 0, 0, maxname, maxloc), h: 8 * num(p.scale, 1) * MATES.length }
+  },
+  (g, p, _ctx, r) => {
+    const { maxname, maxloc } = teaminfoNames(p)
+    MATES.forEach((m, i) => teaminfoRow(g, p, m, i, r.x, r.y + i * 8 * num(p.scale, 1), maxname, maxloc))
+  },
+)
+
+// MVD_ClockList_TopItems_Draw (mvd_utils.c). colored_name is the built-in colour (style 0); tp_name_* is style 1.
+const CLOCK_ITEMS: [string, string, string][] = [
+  ['rl', '&cf0frl&r', ' 3'],
+  ['quad', '&c00fquad&r', ' up'],
+  ['ra', '&cf00ra&r', ' 4'],
+  ['lg', '&cf0flg&r', ' 2'],
+]
+const brown = (s: string) => [...s].map((c) => String.fromCharCode(c.charCodeAt(0) | 128)).join('')
+const itemsclockImpl: ElementImpl = (() => {
+  const lines = (p: Params) => {
+    const style = int(p.style)
+    return CLOCK_ITEMS.map(([name, colored, time]) => {
+      const t = int(p.timelimit, 5) >= 10 ? time.replace(/^ (\d)$/, '  $1') : time
+      if (style === 1) return TP_NAMES[name] + t
+      if (style === 2) return brown(name) + t
+      return colored + t
+    })
+  }
+  return {
+    size(p) {
+      const s = scaleOf(p)
+      const style = int(p.style)
+      const chars = style === 1 ? Math.max(...CLOCK_ITEMS.map(([n]) => visibleLength(TP_NAMES[n]))) + 6 : style === 3 || style === 4 ? 8 : 10
+      return { w: chars * 8 * s, h: CLOCK_ITEMS.length * 8 * s }
+    },
+    draw(g, p, _ctx, r) {
+      const s = scaleOf(p)
+      lines(p).forEach((line, i) => rich(g, line, r.x, r.y + i * 8 * s, s))
+    },
+  }
+})()
+
+// SCR_CreateWeaponStatsPlayerText: %N is weapon N's accuracy, #N its hits (2 sg ... 8 lg).
+const WEAPON_STATS: Record<number, [number, number]> = { 1: [0, 0], 2: [45.2, 31], 3: [30, 22], 4: [21.5, 40], 5: [24.8, 55], 6: [18, 3], 7: [52.3, 12], 8: [33.1, 140] }
+const weaponstatsText = (p: Params) =>
+  parseFunChars(p.format ?? '').replace(/([%#])([\s\S])/g, (_all, kind: string, next: string) => {
+    if (next === kind) return kind
+    const stats = WEAPON_STATS[Number(next)]
+    if (!stats) return ''
+    return kind === '%' ? stats[0].toFixed(1) : String(stats[1])
+  })
+
+// SCR_HUD_DrawScoresBar (hud_scores.c), red against blue.
+function scoreBarSmall(p: Params, c: Ctx): string {
+  const team = c.preview.teamScore
+  const enemy = c.preview.enemyScore
+  const digits = Math.max(1, Math.min(int(p.frag_length), 4))
+  const diff = team - enemy
+  return parseFunChars(p.format_small ?? '').replace(/%([\s\S])/g, (_all, code: string) => {
+    switch (code) {
+      case '%': return '%'
+      case 't': return String(team).padStart(digits)
+      case 'e': return String(enemy).padStart(digits)
+      case 'd': return String(diff)
+      case 'p': return '1'
+      case 'T': return 'red'
+      case 'E': return 'blue'
+      case 'D': return diff >= 0 ? `+${diff}` : String(diff)
+      default: return `%${code}`
+    }
+  })
+}
+// Big style: only %codes and ": / - space" are kept; "c...r" turns the digits red (SCR_DrawWadString).
+function scoreBarBig(p: Params, c: Ctx): string {
+  const team = c.preview.teamScore
+  const enemy = c.preview.enemyScore
+  const diff = team - enemy
+  let out = ''
+  const f = parseFunChars(p.format_big ?? '')
+  for (let i = 0; i < f.length; i++) {
+    if (f[i] === '%' && i + 1 < f.length) {
+      const code = f[++i]
+      const v: Record<string, string> = {
+        d: String(diff),
+        D: `c${diff}r`,
+        e: String(enemy),
+        E: `c${enemy}r`,
+        p: '1',
+        t: String(team),
+        T: `c${team}r`,
+        z: diff >= 0 ? String(diff) : `c${-diff}r`,
+        Z: diff >= 0 ? `c${diff}r` : String(-diff),
+      }
+      out += v[code] ?? ''
+    } else if (': /-'.includes(f[i])) out += f[i]
+  }
+  return out
+}
+function wadString(g: Gfx | null, t: string, x0: number, y: number, s: number): number {
+  let x = x0
+  let red = false
+  for (const ch of t) {
+    const prefix = red ? 'anum' : 'num'
+    if (ch >= '0' && ch <= '9') {
+      g?.pic(`${prefix}_${ch}`, x, y, 24 * s, 24 * s)
+      x += 24 * s
+    } else if (ch === ':' || ch === '/') {
+      g?.pic(`${prefix}_${ch === ':' ? 'colon' : 'slash'}`, x, y, 16 * s, 24 * s)
+      x += 16 * s
+    } else if (ch === '-') {
+      x -= 12 * s
+      g?.pic(`${prefix}_minus`, x, y, 24 * s, 24 * s)
+      x += 28 * s
+    } else if (ch === ' ') x += 16 * s
+    else if (ch === 'c') red = true
+    else if (ch === 'r') red = false
+  }
+  return x - x0
+}
+const scoreBarImpl: ElementImpl = {
+  size(p, c) {
+    const s = scaleOf(p)
+    if (int(p.style) === 1) return { w: wadString(null, scoreBarBig(p, c), 0, 0, s), h: 24 * s }
+    return { w: visibleLength(scoreBarSmall(p, c)) * 8 * s, h: 8 * s }
+  },
+  draw(g, p, c, r) {
+    const s = scaleOf(p)
+    if (int(p.style) === 1) wadString(g, scoreBarBig(p, c), r.x, r.y, s)
+    else rich(g, scoreBarSmall(p, c), r.x, r.y, s)
+  },
+}
+
+// strftime, for scoreclock.
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function strftime(format: string, d: Date): string {
+  const v: Record<string, string> = {
+    d: pad2(d.getDate()),
+    m: pad2(d.getMonth() + 1),
+    Y: String(d.getFullYear()),
+    y: pad2(d.getFullYear() % 100),
+    H: pad2(d.getHours()),
+    I: pad2(d.getHours() % 12 || 12),
+    M: pad2(d.getMinutes()),
+    S: pad2(d.getSeconds()),
+    p: d.getHours() < 12 ? 'AM' : 'PM',
+    a: DAYS[d.getDay()],
+    b: MONTHS[d.getMonth()],
+    '%': '%',
+  }
+  return format.replace(/%([\s\S])/g, (all, code: string) => v[code] ?? all)
+}
+
+// SCR_DrawHUDSpeed (hud_speed.c). Colours are palette indexes; style 1 is the number only.
+const palette = (index: string | undefined, fallback: number, alpha: number) => {
+  const hex = QUAKE_PALETTE[int(index, fallback) & 255] ?? '#ffffff'
+  return `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${alpha})`
+}
+const speedImpl = boxImpl(
+  (p) => ({ w: Math.max(0, num(p.width, 160)) * scaleOf(p), h: Math.max(0, num(p.height, 15)) * scaleOf(p) }),
+  (g, p, c, r) => {
+    const s = scaleOf(p)
+    const speed = Math.trunc(c.preview.speed)
+    const style = int(p.style)
+    const textOnly = (style & 1) === 1
+    const vertical = int(p.vertical) !== 0
+    const opacity = num(p.opacity, 1)
+    const { x, y, w, h } = r
+    const white = palette('10', 10, opacity)
+    const offset = Math.trunc(((vertical ? h : w) * (speed % 500)) / 500)
+    const colors = [
+      [p.color_stopped, 52],
+      [p.color_normal, 100],
+      [p.color_fast, 72],
+      [p.color_fastest, 216],
+      [p.color_insane, 229],
+    ] as const
+    const band = Math.min(3, Math.trunc(speed / 500))
+    const slow = palette(colors[band][0], colors[band][1], opacity)
+    const fast = palette(colors[band + 1][0], colors[band + 1][1], opacity)
+    if (!textOnly) {
+      const tick = num(p.tick_spacing, 0.2)
+      if (tick > 0)
+        for (let f = tick; f < 1; f += tick) {
+          if (vertical) {
+            g.fill(x, y + Math.trunc(f * h), 2, 1, white)
+            g.fill(x + w - 1, y + Math.trunc(f * h), 2, 1, white)
+          } else {
+            g.fill(x + Math.trunc(f * w), y, 1, 2, white)
+            g.fill(x + Math.trunc(f * w), y + h - 1, 1, 2, white)
+          }
+        }
+      if (vertical) {
+        g.fill(x + 2, y, 1, h, white)
+        g.fill(x + w - 2, y, 1, h, white)
+        g.fill(x + 3, y, w - 6, h - offset, slow)
+        g.fill(x + 3, y + h - offset, w - 6, offset, fast)
+      } else {
+        g.fill(x, y + 2, w, 1, white)
+        g.fill(x, y + h - 2, w, 1, white)
+        g.fill(x + offset, y + 3, w - offset, h - 6, slow)
+        g.fill(x, y + 3, offset, h - 6, fast)
+      }
+    }
+    const align = int(p.text_align, 1)
+    if (align === 0) return
+    const text = style === 2 || style === 3 ? `${String(speed).padStart(4)}${'0'.padStart(5)}${'0'.padStart(5)}` : String(speed).padStart(4)
+    if (vertical && int(p.vertical_text, 1)) {
+      let ty = align === 3 ? y + h - 32 : align === 2 ? Math.round(y + h / 2 - 16) : y
+      for (const digit of String(speed)) {
+        g.text(digit, Math.round(x + w / 2 - 4 * s), ty, s)
+        ty += 8
+      }
+    } else {
+      aligned(g, text, x, y + h / 2 - 4 * s, s, align === 3 ? 'right' : align === 2 ? 'center' : 'left', Math.max(w, text.length * 8 * s))
+    }
+  },
+)
+
 export const IMPLS: Record<string, ElementImpl> = {
   face: picImpl((_p, c) => `face${faceIndex(c.preview.health)}`, 24, 24, () => 'f', () => true),
   health: numberImpl((c) => c.preview.health, (v) => v <= 25),
@@ -376,12 +754,12 @@ export const IMPLS: Record<string, ElementImpl> = {
 
   ...Object.fromEntries(Object.entries(ITEM_PICS).map(([n, [pic, letter]]) => [n, picImpl(() => pic, 16, 16, () => letter)])),
   ...Object.fromEntries([1, 2, 3, 4].map((i) => [`sigil${i}`, picImpl(() => `sb_sigil${i}`, 8, 16, () => String(i))])),
-  itemsclock: textImpl(() => ['RL  0:12', 'QUAD 0:45', 'RA  0:03']),
+  itemsclock: itemsclockImpl,
 
   clock: clockImpl((p) => (clockFormats[int(p.format)] ?? clockFormats[0])(), 1),
   gameclock: clockImpl(() => '12:34', 1),
   democlock: clockImpl(() => '03:21', 0),
-  scoreclock: textImpl(() => `${pad2(now.getDate())}-${pad2(now.getMonth() + 1)}-${now.getFullYear()} ${clockFormats[0]()}`),
+  scoreclock: textImpl((p) => strftime(p.format ?? '%d-%m-%Y %H:%M:%S', now)),
 
 
   frags: fragsImpl(4, false),
@@ -391,19 +769,11 @@ export const IMPLS: Record<string, ElementImpl> = {
   score_enemy: numberImpl((c) => c.preview.enemyScore),
   score_difference: numberImpl((c) => c.preview.teamScore - c.preview.enemyScore),
   score_position: numberImpl(() => 1),
-  score_bar: textImpl((p, c) =>
-    int(p.style) === 1
-      ? `${c.preview.teamScore}:${c.preview.enemyScore}`
-      : `red:${c.preview.teamScore} blue:${c.preview.enemyScore} [+${c.preview.teamScore - c.preview.enemyScore}]`,
-  ),
-  tracker: textImpl(() => ['Ranger [rl] Grunt', 'Grunt [lg] Ogre', 'Fiend [gl] Ranger']),
+  score_bar: scoreBarImpl,
+  // Weapons in the tp_name_* colours: rl red, lg blue.
+  tracker: textImpl(() => [`Ranger ${TP_NAMES.rl} Grunt`, `Ogre ${TP_NAMES.lg} Fiend`, `Zombie ${TP_NAMES.gl} Shambler`]),
 
-  teaminfo: textImpl(() => [
-    'Ranger  ra  150/100 rl',
-    'Ogre    ya   80/ 72 lg',
-    'Fiend   ga   30/ 45 sg',
-    'Grunt        0/ 12 sg',
-  ]),
+  teaminfo: teaminfoImpl,
   tracking: textImpl((p) => (p.format ?? 'Tracking %t %n, JUMP for next').replace('%t', 'red').replace('%n', 'Ranger')),
   radar: mockBox('radar', (p, c) => ({ w: percentOr(p.width, c.screenW, 200), h: percentOr(p.height, c.screenH, 150) })),
   gamesummary: mockBox('summary', (p) => {
@@ -435,18 +805,12 @@ export const IMPLS: Record<string, ElementImpl> = {
     },
   ),
   centerprint: textImpl(() => 'Match begins in 3 seconds'),
-  speed: boxImpl(
-    (p) => ({ w: num(p.width, 160) * scaleOf(p), h: num(p.height, 15) * scaleOf(p) }),
-    (g, _p, c, r) => {
-      g.fill(r.x, r.y, r.w, r.h, 'rgba(0,0,0,0.3)')
-      g.fill(r.x, r.y, (r.w * Math.min(c.preview.speed, 500)) / 500, r.h, 'rgba(100,200,100,0.6)')
-    },
-  ),
+  speed: speedImpl,
   speed2: mockBox('speed', (p) => {
     const rad = num(p.radius, 50) * scaleOf(p)
     return int(p.orientation) % 2 ? { w: rad, h: 2 * rad } : { w: 2 * rad, h: rad }
   }),
-  weaponstats: textImpl(() => 'sg:45% ssg:30% rl:#12 lg:33%'),
+  weaponstats: textImpl((p) => weaponstatsText(p).split('\n')),
   keys: textImpl(() => [' ^ ', '<v>']),
 
   ...Object.fromEntries(

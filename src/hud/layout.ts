@@ -28,6 +28,7 @@ export interface Screen {
   width: number // conwidth
   height: number // conheight
   sbLines: number // from viewsize: <110 = 48, <120 = 24, else 0
+  view: Rect // the 3D view (scr_vrect): the whole screen at viewsize 100 and up, smaller and centred below
 }
 
 export const SCREEN_AREAS = ['screen', 'top', 'view', 'sbar', 'ibar', 'hbar', 'sfree', 'ifree', 'hfree'] as const
@@ -36,6 +37,24 @@ export const ALIGN_Y = ['top', 'center', 'bottom', 'before', 'after', 'console']
 
 export function sbLinesForViewsize(viewsize: number): number {
   return viewsize < 110 ? 48 : viewsize < 120 ? 24 : 0
+}
+
+// SCR_CalcRefdef (cl_screen.c), with cl_sbar 0. viewsize is bound to 30..120.
+export function viewRect(W: number, H: number, viewsize: number): Rect {
+  const size = Math.min(120, Math.max(30, viewsize))
+  if (size >= 100) return { x: 0, y: 0, w: W, h: H }
+  let f = size / 100
+  let w = Math.trunc(W * f)
+  if (w < 96) {
+    f = 96 / w
+    w = 96
+  }
+  const h = Math.min(Math.trunc(H * f), H - 48)
+  return { x: Math.trunc((W - w) / 2), y: Math.trunc((H - 48 - h) / 2), w, h }
+}
+
+export function screenFor(width: number, height: number, viewsize: number): Screen {
+  return { width, height, sbLines: sbLinesForViewsize(viewsize), view: viewRect(width, height, viewsize) }
 }
 
 const SBAR_WIDTH = 320
@@ -48,7 +67,7 @@ export function areaBounds(place: string, s: Screen): Rect {
     case 'top':
       return { x: 0, y: 0, w: W, h: H - sb }
     case 'view':
-      return { x: 0, y: 0, w: W, h: H } // scr_vrect is full screen at viewsize >= 100
+      return s.view
     case 'sbar':
       return { x: 0, y: H - sb, w: SBAR_WIDTH, h: sb }
     case 'ibar':

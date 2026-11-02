@@ -24,7 +24,7 @@ const RESOLUTIONS: [number, number][] = [
   [2560, 1080],
   [3440, 1440],
 ]
-const VIEWSIZES = [100, 110, 120]
+const VIEWSIZES = [85, 90, 95, 99, 100, 110, 120]
 
 // In-game screenshots to place the HUD on.
 const BACKGROUNDS: [string, string][] = [
@@ -93,7 +93,8 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const auto = !settings.conwidth && !settings.conheight
   const resolution = `${settings.width}x${settings.height}`
   const resolutions = RESOLUTIONS.some(([w, h]) => `${w}x${h}` === resolution) ? RESOLUTIONS : [[settings.width, settings.height], ...RESOLUTIONS]
-  const viewsizes = VIEWSIZES.includes(settings.viewsize) ? VIEWSIZES : [settings.viewsize, ...VIEWSIZES]
+  // A loaded cfg may set any value (ezQuake takes 30 to 120); it is listed in order.
+  const viewsizes = VIEWSIZES.includes(settings.viewsize) ? VIEWSIZES : [...VIEWSIZES, settings.viewsize].sort((a, b) => a - b)
 
   return (
     <header className="toolbar">
@@ -172,7 +173,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             </option>
           ))}
         </select>
-        <label title="vid_conscale: the HUD is drawn at resolution / conscale (when conwidth/conheight are 0)">
+        <label title="Divides the resolution to get the HUD's virtual size: 1920×1080 at conscale 2 is 960×540. Higher means fewer virtual pixels, so everything looks bigger. Only used while con W × H is on auto.">
           conscale
           <input
             type="number"
@@ -184,7 +185,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             onChange={(e) => setSettings({ conscale: Math.max(0.5, parseFloat(e.target.value) || 2) })}
           />
         </label>
-        <label title="vid_conwidth × vid_conheight: the virtual HUD size. Empty = derived from conscale.">
+        <label title="Sets the HUD's virtual size directly (vid_conwidth × vid_conheight) and overrides conscale. If its proportions differ from the resolution's, the game stretches the HUD. Grey numbers show the size conscale gives right now.">
           con
           <input
             type="number"
@@ -204,12 +205,12 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             onChange={(e) => setSettings({ conheight: Math.max(0, parseInt(e.target.value, 10) || 0) })}
           />
           {!auto && (
-            <button title="Back to conscale" onClick={() => setSettings({ conwidth: 0, conheight: 0 })}>
+            <button title="Clears con W × H so the virtual size comes from the resolution and conscale again." onClick={() => setSettings({ conwidth: 0, conheight: 0 })}>
               auto
             </button>
           )}
         </label>
-        <label title="viewsize sets the status bar height used by the sbar/ibar/hbar places">
+        <label title="viewsize: below 100 the 3D view shrinks (the view place shrinks with it); 100, 110 and 120 set the status bar height used by the sbar/ibar/hbar places">
           viewsize
           <select value={settings.viewsize} onChange={(e) => setSettings({ viewsize: Number(e.target.value) })}>
             {viewsizes.map((v) => (

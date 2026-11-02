@@ -8,12 +8,12 @@ import { IMPLS, implFor } from './elements'
 import { decodeTga, decodeWad } from '../render/decode'
 import { texturePriority } from '../render/textures'
 import { findIssues } from './issues'
-import { frameExtents, layoutHud, sbLinesForViewsize, shouldShow, wouldCycle } from './layout'
+import { frameExtents, layoutHud, screenFor, shouldShow, viewRect, wouldCycle } from './layout'
 import { DEFAULT_PREVIEW } from './preview'
 
 const presets = join(__dirname, 'presets')
 const nquake = readFileSync(join(presets, 'nquake-default.cfg'), 'latin1')
-const screen = { width: 960, height: 540, sbLines: sbLinesForViewsize(100) }
+const screen = screenFor(960, 540, 100)
 const sizer = (name: string, p: Record<string, string>) =>
   implFor(name).size(p, { preview: DEFAULT_PREVIEW, screenW: 960, screenH: 540 })
 
@@ -226,5 +226,52 @@ describe('texture priority', () => {
       'num_0.png',
       'num_0.jpg',
     ])
+  })
+})
+
+describe('viewsize', () => {
+  it('keeps the view full screen from 100 up, and shrinks and centres it above the status bar below', () => {
+    expect(viewRect(640, 480, 100)).toEqual({ x: 0, y: 0, w: 640, h: 480 })
+    expect(viewRect(640, 480, 50)).toEqual({ x: 160, y: 96, w: 320, h: 240 })
+    expect(viewRect(640, 480, 10)).toEqual(viewRect(640, 480, 30)) // bound to 30
+  })
+})
+
+describe('formatted elements', () => {
+  const ctx = { preview: DEFAULT_PREVIEW, screenW: 640, screenH: 480 }
+  const size = (name: string, params: Record<string, string>) => implFor(name).size({ ...EZQUAKE_DEFAULTS[name], ...params }, ctx)
+
+  it('sizes teaminfo from its layout', () => {
+    // "%p%n $x10%l$x11 %a/%H %w": powerups 3, name 6, space, [, loc 5, ], space, armor 3, /, health 3, space, weapon icon 2 = 28
+    expect(size('teaminfo', {})).toEqual({ w: 28 * 8, h: 4 * 8 })
+    expect(size('teaminfo', { weapon_style: '1', show_ammo: '1' })!.w).toBe((28 - 2 + 3 + 4) * 8)
+  })
+
+  it('sizes score_bar from format_small and format_big', () => {
+    // "&c69f%T&r:%t &cf10%E&r:%e $[%D$]" -> "red:54 blue:37 [+17]"
+    expect(size('score_bar', {})).toEqual({ w: 20 * 8, h: 8 })
+    // "%t:%e:%Z" -> 54:37:c17r, six digits and two colons
+    expect(size('score_bar', { style: '1' })).toEqual({ w: 6 * 24 + 2 * 16, h: 24 })
+  })
+
+  it('fills in the weaponstats format', () => {
+    // "&c990sg&r:%2 &c099ssg&r:%3 &c900rl&r:#7 &c009lg&r:%8" -> "sg:45.2 ssg:30.0 rl:12 lg:33.1"
+    expect(size('weaponstats', {})).toEqual({ w: 30 * 8, h: 8 })
+  })
+})
+
+describe('settings in a cfg', () => {
+  it('reads viewsize, bound to 30..120 as in game', () => {
+    expect(parseCfg('viewsize "95"').client.viewsize).toBe(95)
+    expect(parseCfg('viewsize 200').client.viewsize).toBe(120)
+    expect(viewRect(640, 360, 99)).toEqual({ x: 3, y: 0, w: 633, h: 312 })
+  })
+
+  it('marks negative values as invalid, except where ezQuake takes them', () => {
+    const doc = withDefaults(parseCfg('hud_ammo_show 1\nhud_ammo_pos_x -20\nhud_ammo_digits -2\nhud_ammo_scale -1').doc)
+    expect(findIssues(doc, layoutHud(doc, screen, (n, p) => implFor(n).size(p, { preview: DEFAULT_PREVIEW, screenW: 960, screenH: 540 })), screen)
+      .filter((i) => /negative/.test(i.message))
+      .map((i) => i.message)
+      .sort()).toEqual(["digits can't be negative.", "scale can't be negative."])
   })
 })
