@@ -1,0 +1,215 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+import { ELEMENTS } from './catalog'
+import { parseCfg, serializeCfg, splitCvar } from './cfg'
+import { EZQUAKE_DEFAULTS, withDefaults } from './defaults'
+import { IMPLS, implFor } from './elements'
+import { decodeTga, decodeWad } from '../render/decode'
+import { findIssues } from './issues'
+import { frameExtents, layoutHud, sbLinesForViewsize, shouldShow, wouldCycle } from './layout'
+import { DEFAULT_PREVIEW } from './preview'
+
+const presets = join(__dirname, 'presets')
+const nquake = readFileSync(join(presets, 'nquake-default.cfg'), 'latin1')
+const screen = { width: 960, height: 540, sbLines: sbLinesForViewsize(100) }
+const sizer = (name: string, p: Record<string, string>) =>
+  implFor(name).size(p, { preview: DEFAULT_PREVIEW, screenW: 960, screenH: 540 })
+
+describe('cvar names', () => {
+  it('matches element names containing underscores', () => {
+    expect(splitCvar('hud_score_team_colorize')).toEqual({ element: 'score_team', param: 'colorize' })
+    expect(splitCvar('hud_bar_health_color_normal')).toEqual({ element: 'bar_health', param: 'color_normal' })
+    expect(splitCvar('hud_static_text_text')).toEqual({ element: 'static_text', param: 'text' })
+    expect(splitCvar('hud_gun2_style')).toEqual({ element: 'gun2', param: 'style' })
+    expect(splitCvar('hud_planmode')).toBeNull()
+  })
+
+  it('every element has an implementation', () => {
+    expect(ELEMENTS.filter((e) => !IMPLS[e.name]).map((e) => e.name)).toEqual([])
+  })
+})
+
+describe('cfg', () => {
+  it('parses the nQuake default HUD', () => {
+    const { doc, ignored } = parseCfg(nquake)
+    expect(ignored).toBe(0)
+    expect(Object.keys(doc.elements).length).toBe(82)
+    expect(doc.elements.ammo1.place).toBe('gun2')
+    expect(doc.globals.hud_planmode).toBe('0')
+    expect(doc.globals.scr_newhud).toBe('1')
+  })
+
+  it('round-trips the nQuake default HUD byte for byte (ignoring header)', () => {
+    const body = (s: string) => s.replace(/\r/g, '').split('\n').filter((l) => l && !l.startsWith('//'))
+    expect(body(serializeCfg(parseCfg(nquake).doc))).toEqual(body(nquake))
+  })
+
+  it('drops non-HUD commands and handles comments, set and ;', () => {
+    const { doc, ignored } = parseCfg('name "player"; bind x "+attack"\nset hud_fps_show 1 // fps\nhud_fps_place "top"')
+    expect(ignored).toBe(2)
+    expect(doc.elements.fps).toEqual({ show: '1', place: 'top' })
+  })
+
+  it('drops cvars of other client versions and reads vid_conwidth', () => {
+    const r = parseCfg(readFileSync(join(presets, 'carapace.cfg'), 'latin1'))
+    expect(r.dropped).toContain('hud_mp3_title_width')
+    expect(r.dropped).toContain('hud_mouserate_show')
+    expect(r.dropped).toContain('hud_fps_decimals')
+    expect(r.doc.elements).not.toHaveProperty('mp3_title')
+    expect(r.doc.globals).not.toHaveProperty('hud_mp3_title_width')
+    expect(r.client).toEqual({ conwidth: 560, conheight: 350 })
+
+    const old = parseCfg('hud_group1_tile "1"\nhud_group1_alpha "0.5"\nhud_gun2_frame_hide "1"\nhud_group1_width "10"')
+    expect(old.dropped).toEqual(['hud_group1_tile', 'hud_group1_alpha', 'hud_gun2_frame_hide'])
+    expect(old.doc.elements).toEqual({ group1: { width: '10' } })
+  })
+
+  it('parses every ezQuake sample HUD', () => {
+    for (const f of readdirSync(presets)) {
+      const { doc } = parseCfg(readFileSync(join(presets, f), 'latin1'))
+      expect(Object.keys(doc.elements).length, f).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('layout', () => {
+  it('computes frame padding like HUD_CalcFrameExtents', () => {
+    expect(frameExtents(0.5, 20, 20, false)).toEqual({ l: 4, r: 4, t: 4, b: 4 })
+    expect(frameExtents(0.5, 20, 20, true)).toEqual({ l: 0, r: 0, t: 0, b: 0 })
+    expect(frameExtents(2, 20, 10, true)).toEqual({ l: 10, t: 9, r: 10, b: 9 })
+  })
+
+  it('anchors a child after its parent', () => {
+    const doc = {
+      globals: {},
+      elements: {
+        face: { show: '1', place: 'screen', align_x: 'center', align_y: 'bottom', pos_x: '0', pos_y: '0', scale: '1' },
+        health: { show: '1', place: 'face', align_x: 'after', align_y: 'center', pos_x: '3', pos_y: '0', style: '0', digits: '3' },
+      },
+    }
+    const placed = layoutHud(doc, screen, sizer)
+    expect(placed.get('face')!.outer).toEqual({ x: 468, y: 516, w: 24, h: 24 })
+    expect(placed.get('health')!.outer).toEqual({ x: 495, y: 516, w: 72, h: 24 })
+  })
+
+  it('drops both elements of a placement loop, as in game', () => {
+    const doc = {
+      globals: {},
+      elements: {
+        fps: { show: '1', place: 'ping' },
+        ping: { show: '1', place: 'fps' },
+      },
+    }
+    expect(layoutHud(doc, screen, sizer).size).toBe(0)
+    expect(wouldCycle(doc, 'fps', 'ping')).toBe(true)
+  })
+
+  it('lays out the nQuake default HUD', () => {
+    const { doc } = parseCfg(nquake)
+    const placed = layoutHud(doc, screen, sizer)
+    expect(placed.size).toBeGreaterThan(30)
+    for (const p of placed.values()) expect(Number.isFinite(p.outer.x + p.outer.y), p.name).toBe(true)
+  })
+})
+
+describe('ezQuake defaults', () => {
+  it('cover exactly the catalogue elements', () => {
+    expect(Object.keys(EZQUAKE_DEFAULTS).sort()).toEqual(ELEMENTS.map((e) => e.name).sort())
+  })
+
+  it('give every element the common cvars', () => {
+    const common = ['show', 'place', 'align_x', 'align_y', 'pos_x', 'pos_y', 'order', 'item_opacity', 'draw']
+    for (const [name, p] of Object.entries(EZQUAKE_DEFAULTS)) {
+      for (const k of common) expect(p[k], `${name}.${k}`).toBeDefined()
+    }
+    expect(EZQUAKE_DEFAULTS.face).toMatchObject({ show: '1', place: 'screen', align_x: 'center', align_y: 'bottom' })
+    expect(EZQUAKE_DEFAULTS.speed.color_stopped).toBe('52') // resolved from a #define
+  })
+
+  it('fill cvars a partial cfg leaves out, keeping the cfg values', () => {
+    const doc = withDefaults(parseCfg('hud_health_pos_x "10"').doc)
+    expect(doc.elements.health).toMatchObject({ pos_x: '10', place: 'face', align_x: 'after', style: '0' })
+    expect(Object.keys(doc.elements).length).toBe(Object.keys(EZQUAKE_DEFAULTS).length)
+  })
+
+  // A shown element may only be missing because its parent is (hidden parents hide children in game too).
+  it('let every shown element of every sample preset be placed, unless its parent is hidden', () => {
+    for (const f of readdirSync(presets)) {
+      const doc = withDefaults(parseCfg(readFileSync(join(presets, f), 'latin1')).doc)
+      const placed = layoutHud(doc, screen, sizer)
+      const missing = Object.entries(doc.elements)
+        .filter(([name, p]) => shouldShow(p.show) && !placed.has(name))
+        .filter(([, p]) => {
+          const parent = (p.place ?? '').replace(/^@/, '')
+          return !doc.elements[parent] || placed.has(parent)
+        })
+        .map(([name, p]) => `${name} (place ${p.place})`)
+      expect(missing, f).toEqual([])
+    }
+  })
+})
+
+describe('issues', () => {
+  const issuesOf = (elements: Record<string, Record<string, string>>) => {
+    const doc = withDefaults({ globals: {}, elements })
+    for (const [name, p] of Object.entries(doc.elements)) if (!elements[name]) p.show = '0'
+    return findIssues(doc, layoutHud(doc, screen, sizer), screen)
+  }
+
+  it('reports off-screen, cut-off and invalid values', () => {
+    const issues = issuesOf({
+      fps: { show: '1', place: 'screen', align_x: 'right', pos_x: '200' },
+      ping: { show: '1', place: 'screen', align_x: 'right', pos_x: '20' },
+      clock: { show: '1', place: 'center', align_x: 'top', align_y: 'left' },
+    })
+    expect(issues.map((i) => `${i.element} ${i.severity}`)).toEqual([
+      'clock warning',
+      'clock warning',
+      'clock warning',
+      'fps error',
+      'ping warning',
+    ])
+  })
+
+  it('reports elements hidden by their parent', () => {
+    const issues = issuesOf({ face: { show: '0' }, health: { show: '1', place: 'face' } })
+    expect(issues).toEqual([{ element: 'health', severity: 'warning', message: 'Not drawn: it is placed on face, which is hidden.' }])
+  })
+
+  it('grows a group to its picture with pic_scalemode 3', () => {
+    expect(sizer('group1', { width: '32', height: '32', picture: 'Clock', pic_scalemode: '3' })).toEqual({ w: 128, h: 128 })
+    expect(sizer('group1', { width: '32', height: '32', picture: 'clock', pic_scalemode: '2' })).toEqual({ w: 32, h: 32 })
+  })
+})
+
+describe('client settings', () => {
+  it('reads them from a cfg and writes them on request', () => {
+    const r = parseCfg('vid_width "1920"\nvid_height 1200\nvid_conscale "2"\nvid_conwidth 640\nvid_conheight 480\nviewsize 110\nhud_fps_show 1')
+    expect(r.client).toEqual({ width: 1920, height: 1200, conscale: 2, conwidth: 640, conheight: 480, viewsize: 110 })
+    expect(r.ignored).toBe(0)
+    const client = { width: 1920, height: 1200, conscale: 2, conwidth: 640, conheight: 480, viewsize: 110 }
+    const out = serializeCfg(r.doc, { client, date: new Date(2026, 10, 2, 9, 5) })
+    expect(out).toContain('// Generated by QuakeWorld HUD Editor on 2026-11-02 09:05')
+    expect(parseCfg(out).client).toEqual(client)
+    expect(serializeCfg(r.doc)).not.toContain('vid_width')
+  })
+})
+
+describe('texture decoding', () => {
+  it('decodes a bottom-up 24-bit TGA', () => {
+    const tga = new Uint8Array([0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 2, 0, 24, 0, 1, 2, 3, 4, 5, 6])
+    const img = decodeTga(tga)
+    expect([img.w, img.h]).toEqual([1, 2])
+    expect([...img.data]).toEqual([6, 5, 4, 255, 3, 2, 1, 255]) // last row in the file is the top row
+  })
+
+  it('reads qpic lumps from a WAD2', () => {
+    const pic = [2, 0, 0, 0, 1, 0, 0, 0, 0, 255] // 2×1: palette 0, transparent
+    const head = [...'WAD2'].map((c) => c.charCodeAt(0)).concat([1, 0, 0, 0, 12 + pic.length, 0, 0, 0])
+    const entry = [12, 0, 0, 0, pic.length, 0, 0, 0, pic.length, 0, 0, 0, 0x42, 0, 0, 0, ...[...'NUM_0'].map((c) => c.charCodeAt(0)), ...Array(11).fill(0)]
+    const [lump] = decodeWad(new Uint8Array([...head, ...pic, ...entry]))
+    expect(lump.name).toBe('num_0')
+    expect([...lump.image.data]).toEqual([0, 0, 0, 255, ...lump.image.data.slice(4, 7), 0])
+  })
+})

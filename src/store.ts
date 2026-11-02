@@ -1,0 +1,141 @@
+import { create } from 'zustand'
+import type { ClientSettings, HudDoc } from './hud/cfg'
+import { emptyDoc } from './hud/cfg'
+import { withDefaults } from './hud/defaults'
+import { DEFAULT_PREVIEW, type Preview } from './hud/preview'
+
+// Client settings (resolution, conscale, conwidth/conheight, viewsize) plus editor preferences.
+export interface Settings extends ClientSettings {
+  exportClient: boolean // also write the client settings when exporting
+  background: string // url, '' for none
+  showInactive: boolean // draw elements that would not show in the current view mode
+  zoom: number // 1 = fit the window, 2 and 4 = magnified (scrollable)
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  width: 1920,
+  height: 1080,
+  conscale: 2,
+  conwidth: 0,
+  conheight: 0,
+  viewsize: 100,
+  exportClient: false,
+  background: 'assets/backgrounds/default.webp',
+  showInactive: false,
+  zoom: 1,
+}
+
+const HISTORY_LIMIT = 200
+const STORAGE_KEY = 'qw-hud-editor:v1'
+
+interface State {
+  doc: HudDoc
+  selected: string | null
+  preview: Preview
+  settings: Settings
+  past: HudDoc[]
+  future: HudDoc[]
+
+  // Loads a parsed cfg; cvars it does not set get their ezQuake defaults.
+  loadDoc(doc: HudDoc): void
+  select(name: string | null): void
+  // Pushes the current doc onto the undo stack; call once before a group of live edits (e.g. a drag).
+  checkpoint(): void
+  // Edits without touching history (use after checkpoint()).
+  setParams(element: string, values: Record<string, string>): void
+  // Single undoable edit.
+  editParams(element: string, values: Record<string, string>): void
+  undo(): void
+  redo(): void
+  setPreview(p: Partial<Preview>): void
+  setSettings(s: Partial<Settings>): void
+}
+
+function loadSaved(): Partial<Pick<State, 'doc' | 'settings' | 'preview'>> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+const saved = loadSaved()
+
+export const useStore = create<State>((set, get) => ({
+  doc: saved.doc ? withDefaults(saved.doc) : emptyDoc(),
+  selected: null,
+  // The view mode always starts as player.
+  preview: { ...DEFAULT_PREVIEW, ...saved.preview, mode: DEFAULT_PREVIEW.mode },
+  settings: { ...DEFAULT_SETTINGS, ...saved.settings },
+  past: [],
+  future: [],
+
+  loadDoc(doc) {
+    get().checkpoint()
+    set({ doc: withDefaults(doc), selected: null })
+  },
+  select(selected) {
+    set({ selected })
+  },
+  checkpoint() {
+    const { doc, past } = get()
+    set({ past: [...past.slice(-HISTORY_LIMIT + 1), doc], future: [] })
+  },
+  setParams(element, values) {
+    const { doc } = get()
+    set({
+      doc: { ...doc, elements: { ...doc.elements, [element]: { ...doc.elements[element], ...values } } },
+    })
+  },
+  editParams(element, values) {
+    get().checkpoint()
+    get().setParams(element, values)
+  },
+  undo() {
+    const { past, future, doc } = get()
+    if (!past.length) return
+    set({ doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future] })
+  },
+  redo() {
+    const { past, future, doc } = get()
+    if (!future.length) return
+    set({ doc: future[0], future: future.slice(1), past: [...past, doc] })
+  },
+  setPreview(p) {
+    set({ preview: { ...get().preview, ...p } })
+  },
+  setSettings(s) {
+    set({ settings: { ...get().settings, ...s } })
+  },
+}))
+
+export const hasSavedDoc = () => saved.doc !== undefined
+
+useStore.subscribe((s) => {
+  try {
+    // Uploaded backgrounds are data URLs and can exceed the quota; don't persist them.
+    const settings = s.settings.background.startsWith('data:') ? { ...s.settings, background: DEFAULT_SETTINGS.background } : s.settings
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ doc: s.doc, settings, preview: s.preview }))
+  } catch {
+    // storage unavailable or full: editing still works, it just isn't remembered
+  }
+})
+
+// Virtual HUD size the way ezQuake derives vid.conwidth/conheight (vid_sdl2.c).
+export function virtualSize(s: Settings): { width: number; height: number } {
+  let w = s.conwidth
+  let h = s.conheight
+  if (!w && !h) {
+    w = s.width / s.conscale
+    h = s.height / s.conscale
+  } else if (!w) {
+    w = (h * s.width) / s.height
+  } else if (!h) {
+    h = (w * s.height) / s.width
+  }
+  return {
+    width: Math.round(Math.min(s.width, Math.max(320, w))),
+    height: Math.round(Math.min(s.height, Math.max(200, h))),
+  }
+}
