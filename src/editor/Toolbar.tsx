@@ -37,6 +37,8 @@ const BACKGROUNDS: [string, string][] = [
   ['flat.jpg', 'flat'],
   ['peppe.jpg', 'peppe'],
 ]
+// Map screenshots from vikpe/quake-mapshots, named by their file.
+const MAPS = ['anwalked', 'aztec', 'bravado', 'dm2', 'dm4', 'dm6', 'e3m7', 'schloss', 'ztndm3']
 
 const icon = (d: string[]) => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -262,6 +264,13 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
               Background: {name}
             </option>
           ))}
+          <optgroup label="Maps">
+            {MAPS.map((name) => (
+              <option key={name} value={`assets/backgrounds/maps/${name}.webp`}>
+                Background: {name}
+              </option>
+            ))}
+          </optgroup>
           <option value="">Background: none</option>
           {customBackground && <option value={CUSTOM_BACKGROUND}>Background: uploaded</option>}
           <option value="upload">Upload background…</option>
