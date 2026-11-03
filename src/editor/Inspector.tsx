@@ -139,7 +139,7 @@ export function Inspector() {
         />
       )
     }
-    const key = `${selected}.${param}=${value}`
+    const key = `${selected}.${param}`
     if (isColorParam(param)) {
       return (
         <ColorField

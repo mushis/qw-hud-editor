@@ -1,11 +1,22 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
 import { parseRgb, type Rgba } from '../hud/colors'
 import QUAKE_PALETTE from '../hud/quake-palette.json'
 
-// Text field that commits on Enter / blur so each edit is one undo step.
-// Remount it (via `key`) when the stored value changes from outside.
-export function TextField({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+// What a box shows while it is edited. A new stored value (undo, a drag, a commit) replaces it during render,
+// so the box keeps its focus instead of being remounted.
+function useDraft(value: string): [string, (v: string) => void] {
   const [draft, setDraft] = useState(value)
+  const [stored, setStored] = useState(value)
+  if (stored !== value) {
+    setStored(value)
+    setDraft(value)
+  }
+  return [draft, setDraft]
+}
+
+// Text field that commits on Enter / blur so each edit is one undo step.
+export function TextField({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [draft, setDraft] = useDraft(value)
   const commit = () => draft !== value && onCommit(draft)
   return (
     <input
@@ -50,9 +61,30 @@ function stepValue(value: string, step: number, dir: number): string {
   return String(parseFloat((n + dir * step).toFixed(places)))
 }
 
-// Number with ▲▼ buttons; ArrowUp/ArrowDown in the box step too (Shift = ×10). Values below min become min.
+// The mouse wheel over a field steps it (Shift = ×10) instead of scrolling the panel. A native listener, since
+// React's wheel events can't stop the page scrolling.
+function useWheelStep(ref: RefObject<HTMLDivElement | null>, onStep: (dir: number, big: boolean) => void) {
+  const latest = useRef(onStep)
+  useEffect(() => {
+    latest.current = onStep
+  })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      const delta = e.deltaY || e.deltaX // Shift+wheel scrolls sideways in some browsers
+      if (!delta) return
+      e.preventDefault()
+      latest.current(delta < 0 ? 1 : -1, e.shiftKey)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [ref])
+}
+
+// Number with ▲▼ buttons; ArrowUp/ArrowDown in the box and the mouse wheel step too (Shift = ×10). Values below min become min.
 export function NumberField({ param, value, min = -Infinity, onCommit }: { param: string; value: string; min?: number; onCommit: (v: string) => void }) {
-  const [draft, setDraft] = useState(value)
+  const [draft, setDraft] = useDraft(value)
   const step = stepFor(param)
   const clamp = (v: string) => (parseFloat(v) < min ? String(min) : v)
   const commit = () => {
@@ -64,8 +96,10 @@ export function NumberField({ param, value, min = -Infinity, onCommit }: { param
     const v = clamp(stepValue(value, big ? step * 10 : step, dir))
     if (v !== value) onCommit(v)
   }
+  const box = useRef<HTMLDivElement>(null)
+  useWheelStep(box, bump)
   return (
-    <div className="num-field">
+    <div className="num-field" ref={box}>
       <input
         value={draft}
         inputMode="decimal"
@@ -104,12 +138,20 @@ interface SliderProps {
   onCommit: (v: string) => void
 }
 
-// Slider plus a small box; the box also takes values beyond the slider's range (scale 5).
+// Slider plus a small box; the box also takes values beyond the slider's range (scale 5). The wheel over it
+// steps it within the slider's range.
 export function SliderField({ value, min, max, step, onStart, onLive, onCommit }: SliderProps) {
   const pending = useRef(false)
   const n = parseFloat(value)
+  const box = useRef<HTMLDivElement>(null)
+  useWheelStep(box, (dir, big) => {
+    const v = parseFloat(stepValue(Number.isFinite(n) ? String(n) : String(min), big ? step * 10 : step, dir))
+    // A value already beyond the range (typed in the box) keeps stepping instead of jumping back to it.
+    const next = String(n > max || n < min ? v : Math.min(max, Math.max(min, v)))
+    if (next !== value) onCommit(next)
+  })
   return (
-    <div className="slider-field">
+    <div className="slider-field" ref={box}>
       <input
         type="range"
         min={min}
@@ -124,7 +166,7 @@ export function SliderField({ value, min, max, step, onStart, onLive, onCommit }
           onLive(e.target.value)
         }}
       />
-      <TextField key={value} value={value} onCommit={onCommit} />
+      <TextField value={value} onCommit={onCommit} />
     </div>
   )
 }
@@ -157,7 +199,7 @@ function RgbFields({ value, onCommit }: { value: string; onCommit: (v: string) =
   return (
     <div className="rgb-fields">
       {CHANNELS.slice(0, count).map((c, i) => (
-        <label key={`${c}${value}`} title={`${c} (0-255)`}>
+        <label key={c} title={`${c} (0-255)`}>
           <span>{c}</span>
           <RgbBox value={parts ? String(Math.round(parts[i] ?? 0)) : ''} onCommit={(v) => commit(i, v)} />
         </label>
@@ -167,7 +209,7 @@ function RgbFields({ value, onCommit }: { value: string; onCommit: (v: string) =
 }
 
 function RgbBox({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
-  const [draft, setDraft] = useState(value)
+  const [draft, setDraft] = useDraft(value)
   const commit = () => draft !== value && onCommit(draft)
   return (
     <input
@@ -227,7 +269,7 @@ export function ColorField({ value, palette, onOpen, onLive, onCommit }: ColorPr
       >
         <span style={{ background: swatch }} />
       </button>
-      {palette ? <TextField key={value} value={value} onCommit={onCommit} /> : <RgbFields value={value} onCommit={onCommit} />}
+      {palette ? <TextField value={value} onCommit={onCommit} /> : <RgbFields value={value} onCommit={onCommit} />}
       {open && (
         <div className="color-pop">
           {palette ? (

@@ -95,6 +95,7 @@ export function Stage() {
 
   // For the selected element: a link from the element it is placed on, and links to the elements placed on it
   // (those get a dotted outline). Each runs between box centres, from a ring on the parent to an arrow on the child.
+  // Line, dashes and caps grow with the zoom, like the HUD.
   const parentOf = (name: string) => {
     const target = (doc.elements[name]?.place ?? '').replace(/^@/, '')
     return target !== name && doc.elements[target] ? target : null
@@ -227,10 +228,10 @@ export function Stage() {
             {links.length > 0 && (
               <svg className="place-links" width={cssWidth} height={cssHeight}>
                 <defs>
-                  <marker id="link-start" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="6" markerHeight="6">
+                  <marker id="link-start" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth={10 * zoom} markerHeight={10 * zoom}>
                     <circle cx="5" cy="5" r="3.5" />
                   </marker>
-                  <marker id="link-end" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <marker id="link-end" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth={10 * zoom} markerHeight={10 * zoom} orient="auto-start-reverse">
                     <path d="M1 1 L9 5 L1 9 z" />
                   </marker>
                 </defs>
@@ -238,7 +239,17 @@ export function Stage() {
                   const [x1, y1] = centre(from)
                   const [x2, y2] = centre(to)
                   return (
-                    <line key={key} className={key === 'parent' ? 'to-selected' : 'from-selected'} x1={x1} y1={y1} x2={x2} y2={y2} markerStart="url(#link-start)" markerEnd="url(#link-end)">
+                    <line
+                      key={key}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      strokeWidth={zoom}
+                      strokeDasharray={(key === 'parent' ? [6, 4] : [2, 4]).map((d) => d * zoom).join(' ')}
+                      markerStart="url(#link-start)"
+                      markerEnd="url(#link-end)"
+                    >
                       <title>{`${to.name} is placed on ${from.name}`}</title>
                     </line>
                   )
