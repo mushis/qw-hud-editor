@@ -5,7 +5,7 @@ import { crosshairFromCvars } from '../render/crosshair'
 import { importKind, isHudPicture, removeKind, texturePriority, type PathFile } from '../render/textures'
 import { useStore } from '../store'
 import { importCfg } from './actions'
-import { readFileText } from './io'
+import { readCfgFile } from './cfgFile'
 
 // A folder read lazily: only the subfolders looked into are listed (a Quake folder can hold thousands of files).
 export interface Folder {
@@ -236,7 +236,8 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
     }
   }
 
-  const text = await readFileText(cfg.file)
+  const text = await readCfgFile(cfg.file)
+  if (text === null) return { ok: false, lines: ['Import cancelled.'] }
   const lines = [
     ...(where ? [`Quake folder found${where}.`] : []),
     ...(config ? [`Config: ${config.name}, chosen on its own.`] : key(cfg.path) === 'ezquake/configs/config.cfg' ? [] : [`Config: ${cfg.path}.`]),

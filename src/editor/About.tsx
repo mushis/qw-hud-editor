@@ -74,7 +74,7 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
           The panel on the right edits every setting of the selected element. Settings that differ from the ezQuake default are highlighted
           and ↺ resets one; invalid values are in red. <b>Reset</b> sets the whole element back to its defaults, and <b>Copy from…</b>{' '}
           copies the settings it shares with another element (all but whether it is shown). Number boxes step with ▲▼ or the arrow keys
-          (Shift = ×10) and stop at 0, except positions, <code>order</code>, the game clock <code>offset</code> and the frags
+          (Shift = ×10) and stop at 0, except positions, <code>order</code>, the game clock <code>offset</code>, the fps <code>drop</code> and the frags
           spacing, which ezQuake takes below 0. Colours have a picker and one box per channel.
         </li>
         <li>

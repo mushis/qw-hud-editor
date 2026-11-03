@@ -8,9 +8,11 @@ import { fetchSharedCfg, galleryEnabled, openedFromSignInLink, useGallery } from
 import { MyHuds } from '../gallery/MyHuds'
 import { ShareDialog } from '../gallery/ShareDialog'
 import { About } from './About'
+import { ProportionalDialog } from './ProportionalDialog'
 import { SetupDialog } from './SetupDialog'
 import { currentCfg, importCfg, loadEmptyHud, loadTextureFiles } from './actions'
-import { downloadText, fetchPreset, PRESETS, readFileText } from './io'
+import { readCfgFile } from './cfgFile'
+import { downloadText, fetchPreset, PRESETS } from './io'
 
 const RESOLUTIONS: [number, number][] = [
   [1920, 1080],
@@ -66,7 +68,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const cfgInput = useRef<HTMLInputElement>(null)
   const bgInput = useRef<HTMLInputElement>(null)
   const texInput = useRef<HTMLInputElement>(null)
-  const [dialog, setDialog] = useState<null | 'about' | 'admin' | 'share' | 'mine' | 'setup'>(openedFromSignInLink ? 'admin' : null)
+  const [dialog, setDialog] = useState<null | 'about' | 'admin' | 'share' | 'mine' | 'setup' | 'proportional'>(openedFromSignInLink ? 'admin' : null)
   const [lastName, setLastName] = useState('')
   const close = () => setDialog(null)
 
@@ -123,7 +125,8 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
           onChange={async (e) => {
             const file = e.target.files?.[0]
             e.target.value = ''
-            if (file) load(file.name, await readFileText(file))
+            const text = file && (await readCfgFile(file))
+            if (file && typeof text === 'string') load(file.name, text)
           }}
         />
         <button
@@ -249,7 +252,8 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
         </label>
       </div>
 
-      <div className="group">
+      <fieldset className="group client" title="How the HUD looks in the editor: background, text font and textures">
+        <legend>HUD editor appearance</legend>
         <select
           value={settings.background}
           onChange={(e) => (e.target.value === 'upload' ? bgInput.current?.click() : setSettings({ background: e.target.value }))}
@@ -275,6 +279,9 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             saveCustomBackground(file).then(() => setSettings({ background: CUSTOM_BACKGROUND }))
           }}
         />
+        <button onClick={() => setDialog('proportional')} title="Set proportional (TTF font text) on every element at once, and load the font">
+          Proportional…
+        </button>
         <button
           onClick={() => texInput.current?.click()}
           title="Load custom HUD textures: images (num_0.png, sb_shells.tga…), gfx.wad, or a zip/pk3. You can also drop them on the page."
@@ -311,7 +318,7 @@ Click to remove it (what it replaced shows again).`}
             </button>
           )
         })}
-      </div>
+      </fieldset>
 
       <div className="group end">
         <button className="icon" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo">
@@ -336,6 +343,7 @@ Click to remove it (what it replaced shows again).`}
       {dialog === 'share' && <ShareDialog initialName={lastName} onClose={close} onMessage={onMessage} />}
       {dialog === 'mine' && <MyHuds onClose={close} onMessage={onMessage} />}
       {dialog === 'setup' && <SetupDialog onClose={close} onMessage={onMessage} />}
+      {dialog === 'proportional' && <ProportionalDialog onClose={close} onMessage={onMessage} />}
     </header>
   )
 }

@@ -55,7 +55,7 @@ export function Issues() {
                     .join(' and ')}, and select ${issue.element}. This often fixes the issue. You can undo this.
 (defaults from ${DEFAULTS_SOURCE})`}
                 >
-                  Reset
+                  Reset property
                 </button>
               ) : (
                 <span className="issue-reset-none" />

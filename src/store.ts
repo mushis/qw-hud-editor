@@ -14,6 +14,8 @@ export interface Settings extends ClientSettings {
   zoom: number // 1 = fit the window, 2 and 4 = magnified (scrollable)
   theme: ThemeId // editor colours
   crosshair: Crosshair // the crosshair cvars, from Import setup
+  paletteTree: boolean // element list by place (who is placed on whom) instead of by category
+  fontFacepath: string // font_facepath from the last cfg that set it: the TTF proportional text uses
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -29,6 +31,8 @@ export const DEFAULT_SETTINGS: Settings = {
   zoom: 1,
   theme: 'rust',
   crosshair: DEFAULT_CROSSHAIR,
+  paletteTree: false,
+  fontFacepath: '',
 }
 
 const HISTORY_LIMIT = 200
@@ -37,6 +41,7 @@ const STORAGE_KEY = 'qw-hud-editor:v1'
 interface State {
   doc: HudDoc
   selected: string | null
+  hovered: string | null // under the pointer, on the stage or in the element list
   preview: Preview
   settings: Settings
   past: HudDoc[]
@@ -45,6 +50,7 @@ interface State {
   // Loads a parsed cfg; cvars it does not set get their ezQuake defaults.
   loadDoc(doc: HudDoc): void
   select(name: string | null): void
+  hover(name: string | null): void
   // Pushes the current doc onto the undo stack; call once before a group of live edits (e.g. a drag).
   checkpoint(): void
   // Edits without touching history (use after checkpoint()).
@@ -76,6 +82,7 @@ function migrateSettings(s: Settings): Settings {
 export const useStore = create<State>((set, get) => ({
   doc: saved.doc ? withDefaults(saved.doc) : emptyDoc(),
   selected: null,
+  hovered: null,
   // The view mode always starts as player.
   preview: { ...DEFAULT_PREVIEW, ...saved.preview, mode: DEFAULT_PREVIEW.mode },
   settings: migrateSettings({ ...DEFAULT_SETTINGS, ...saved.settings }),
@@ -88,6 +95,9 @@ export const useStore = create<State>((set, get) => ({
   },
   select(selected) {
     set({ selected })
+  },
+  hover(hovered) {
+    if (get().hovered !== hovered) set({ hovered })
   },
   checkpoint() {
     const { doc, past } = get()

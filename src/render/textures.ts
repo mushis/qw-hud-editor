@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { setCustomPictures, type Picture } from '../hud/pictures'
 import { decodePcx, decodeTga, decodeWad, toPng, unzip } from './decode'
+import { setHudFont } from './renderer'
 
 export const CHARSET = '#charset'
 export const CROSSHAIR = '#crosshair'
@@ -150,6 +151,50 @@ export async function loadCustomBackground() {
 export async function saveCustomBackground(file: Blob) {
   showBackground(file)
   await tx('files', 'readwrite', (s) => s.put(file, 'background')).catch(() => {})
+}
+
+// ---------------------------------------------------------------- TTF font for proportional text
+
+// ezQuake loads font_facepath from the system fonts folder; the user picks that file here. Kept like the background.
+export const useHudFont = create<{ name: string | null }>(() => ({ name: null }))
+const FONT_FAMILY = 'qw-hud-ttf'
+let fontFace: FontFace | null = null
+
+async function showFont(file: (Blob & { name?: string }) | undefined, name?: string) {
+  if (fontFace) document.fonts.delete(fontFace)
+  fontFace = null
+  if (file) {
+    try {
+      fontFace = await new FontFace(FONT_FAMILY, await file.arrayBuffer()).load()
+      document.fonts.add(fontFace)
+    } catch {
+      fontFace = null
+    }
+  }
+  useHudFont.setState({ name: fontFace ? (name ?? null) : null })
+  setHudFont(fontFace ? FONT_FAMILY : null)
+}
+
+export async function loadHudFont() {
+  try {
+    const saved = await tx<{ name: string; blob: Blob }>('files', 'readonly', (s) => s.get('font') as IDBRequest<{ name: string; blob: Blob }>)
+    if (saved) await showFont(saved.blob, saved.name)
+  } catch {
+    // not remembered: proportional text uses a common sans-serif
+  }
+}
+
+// Returns false when the file isn't a font the browser can read.
+export async function saveHudFont(file: File): Promise<boolean> {
+  await showFont(file, file.name)
+  if (!fontFace) return false
+  await tx('files', 'readwrite', (s) => s.put({ name: file.name, blob: file }, 'font')).catch(() => {})
+  return true
+}
+
+export async function removeHudFont() {
+  await showFont(undefined)
+  await tx('files', 'readwrite', (s) => s.delete('font')).catch(() => {})
 }
 
 // ---------------------------------------------------------------- importing

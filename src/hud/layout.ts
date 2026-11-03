@@ -221,3 +221,28 @@ export function wouldCycle(doc: HudDoc, child: string, parent: string): boolean 
   }
   return false
 }
+
+// Elements by place: each one under the element it is placed on, once. Elements in a placement loop,
+// which ezQuake doesn't draw, are listed at the top level after the rest.
+export function placeTree(doc: HudDoc, names: string[]): { name: string; depth: number }[] {
+  const parentOf = (n: string) => {
+    const target = (doc.elements[n]?.place ?? '').replace(/^@/, '')
+    return target !== n && doc.elements[target] ? target : null
+  }
+  const children = new Map<string, string[]>()
+  for (const n of names) {
+    const p = parentOf(n)
+    if (p) children.set(p, [...(children.get(p) ?? []), n])
+  }
+  const out: { name: string; depth: number }[] = []
+  const seen = new Set<string>()
+  const walk = (n: string, depth: number) => {
+    if (seen.has(n)) return
+    seen.add(n)
+    out.push({ name: n, depth })
+    for (const c of children.get(n) ?? []) walk(c, depth + 1)
+  }
+  for (const n of names) if (!parentOf(n)) walk(n, 0)
+  for (const n of names) walk(n, 0)
+  return out
+}

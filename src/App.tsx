@@ -2,14 +2,16 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import { parseCfg } from './hud/cfg'
 import { withDefaults } from './hud/defaults'
 import { importCfg, loadTextureFiles } from './editor/actions'
-import { fetchPreset, readFileText } from './editor/io'
+import { readCfgFile } from './editor/cfgFile'
+import { EncodingDialog } from './editor/EncodingDialog'
+import { fetchPreset } from './editor/io'
 import { Inspector } from './editor/Inspector'
 import { Issues } from './editor/Issues'
 import { Palette } from './editor/Palette'
 import { Stage } from './editor/Stage'
 import { Toolbar } from './editor/Toolbar'
 import { loadVisitors, useGallery } from './gallery/api'
-import { droppedFiles, isTextureFile, loadCustomBackground, loadSavedTextures } from './render/textures'
+import { droppedFiles, isTextureFile, loadCustomBackground, loadHudFont, loadSavedTextures } from './render/textures'
 import { hasSavedDoc, useStore } from './store'
 
 function useKeyboard() {
@@ -75,7 +77,8 @@ function useFileDrop(onMessage: (m: string) => void) {
       const cfg = files.find((f) => !f.path.includes('/') && /\.(cfg|txt)$/i.test(f.path))
       const textures = files.filter((f) => isTextureFile(f.path))
       const messages: string[] = []
-      if (cfg) messages.push(importCfg(cfg.file.name, await readFileText(cfg.file)))
+      const text = cfg && (await readCfgFile(cfg.file))
+      if (cfg && typeof text === 'string') messages.push(importCfg(cfg.file.name, text))
       if (textures.length) messages.push(await loadTextureFiles(textures))
       if (!cfg && !textures.length) messages.push('Drop a .cfg file to import it, or textures (.png .tga .wad .zip .pk3, or a folder of them).')
       onMessage(messages.join(' '))
@@ -106,6 +109,7 @@ export default function App() {
   useEffect(() => {
     loadSavedTextures()
     loadCustomBackground()
+    loadHudFont()
     useGallery.getState().refresh()
     loadVisitors()
   }, [])
@@ -134,6 +138,7 @@ export default function App() {
         {message && <div className="toast">{message}</div>}
       </main>
       <Inspector />
+      <EncodingDialog />
       {dragging && (
         <div className="drop-overlay">
           <div>

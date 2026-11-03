@@ -1,5 +1,5 @@
 // Loading and saving whole HUDs. Every way in (import, presets, saved HUDs, drag and drop) goes through importCfg.
-import { emptyDoc, parseCfg, serializeCfg, type ClientSettings } from '../hud/cfg'
+import { emptyDoc, lastValues, parseCfg, serializeCfg, type ClientSettings } from '../hud/cfg'
 import { EZQUAKE_DEFAULTS } from '../hud/defaults'
 import { importTextures, type PathFile } from '../render/textures'
 import { useStore } from '../store'
@@ -22,7 +22,8 @@ export function importCfg(name: string, text: string): string {
   if (!count) return `${name}: no HUD settings found.`
   const { loadDoc, setSettings } = useStore.getState()
   loadDoc(doc)
-  setSettings({ conwidth: 0, conheight: 0, ...client })
+  const font = lastValues(text).font_facepath
+  setSettings({ conwidth: 0, conheight: 0, ...client, ...(font !== undefined && { fontFacepath: font.trim() }) })
   const set = Object.entries(client).map(([k, v]) => `${CLIENT_LABELS[k as keyof ClientSettings]} ${v}`)
   const notes = [
     `${count} of ${Object.keys(EZQUAKE_DEFAULTS).length} elements set${count < Object.keys(EZQUAKE_DEFAULTS).length ? ', the rest at their defaults' : ''}`,

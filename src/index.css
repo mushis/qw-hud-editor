@@ -234,13 +234,18 @@ button.icon.theme {
   padding: 0 0 16px;
 }
 
-.palette .search {
+/* Filter and hierarchy switch stay at the top while the list scrolls. */
+.palette-head {
   position: sticky;
   top: 0;
   z-index: 1;
+  padding-bottom: 6px;
+  background: var(--panel);
+}
+
+.palette .search {
   display: flex;
   padding: 8px;
-  background: var(--panel);
 }
 
 .palette .search input {
@@ -1301,5 +1306,112 @@ button.primary:disabled {
 
 .issues li .issue-reset-none {
   flex: none;
-  width: 44px;
+  width: 89px;
+}
+
+/* ---------------------------------------------------------------- element list hierarchy */
+
+.palette-tree {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 10px;
+  font-size: 12px;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+/* A checkbox drawn as an on/off switch. */
+input.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 16px;
+  margin: 0;
+  border-radius: 8px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+input.switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s;
+}
+
+input.switch:checked {
+  background: var(--accent);
+}
+
+input.switch:checked::after {
+  transform: translateX(12px);
+  background: var(--accent-ink);
+}
+
+input.switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tree-branch {
+  color: var(--dim);
+}
+
+/* ---------------------------------------------------------------- place links on the stage */
+
+.hit.child {
+  outline: 1px dotted color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* Translucent and thin, so the HUD under them stays readable. */
+.place-links {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.place-links line {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.place-links line.from-selected {
+  stroke-dasharray: 2 3;
+  opacity: 0.75;
+}
+
+.place-links marker circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.place-links marker path {
+  fill: var(--accent);
+}
+
+.font-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.font-row > span {
+  flex: 1;
+}
+
+.setup-actions {
+  gap: 8px;
 }

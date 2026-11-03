@@ -45,7 +45,8 @@ export function Stage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drag = useRef<Drag | null>(null)
   const [fitWidth, setFitWidth] = useState(960)
-  const [hovered, setHovered] = useState<string | null>(null)
+  const hovered = useStore((s) => s.hovered)
+  const setHovered = useStore((s) => s.hover)
   const [assetTick, setAssetTick] = useState(0)
 
   // Width that fits the game screen in the available space, keeping the aspect ratio.
@@ -91,6 +92,21 @@ export function Stage() {
   const viewBox = { left: v.x * kx, top: v.y * ky, width: v.w * kx, height: v.h * ky }
 
   const visible = ordered.filter((p) => settings.showInactive || isActive(p.name))
+
+  // For the selected element: a link from the element it is placed on, and links to the elements placed on it
+  // (those get a dotted outline). Each runs between box centres, from a ring on the parent to an arrow on the child.
+  const parentOf = (name: string) => {
+    const target = (doc.elements[name]?.place ?? '').replace(/^@/, '')
+    return target !== name && doc.elements[target] ? target : null
+  }
+  const sel = selected ? placed.get(selected) : undefined
+  const selParent = selected ? parentOf(selected) : null
+  const children = sel ? visible.filter((p) => p.name !== selected && parentOf(p.name) === selected) : []
+  const childNames = new Set(children.map((p) => p.name))
+  const centre = (p: Placed) => [(p.outer.x + p.outer.w / 2) * kx, (p.outer.y + p.outer.h / 2) * ky]
+  const links: { from: Placed; to: Placed; key: string }[] = []
+  if (sel && selParent && placed.get(selParent)) links.push({ from: placed.get(selParent)!, to: sel, key: 'parent' })
+  for (const c of children) links.push({ from: sel!, to: c, key: c.name })
   const status = new Map(visible.filter((p) => p.draw).map((p) => [p.name, offscreen(p, screen)]))
 
   // Off-screen elements get a marker on the nearest screen edge, pointing at them.
@@ -193,7 +209,7 @@ export function Stage() {
             {visible.map((p) => (
               <div
                 key={p.name}
-                className={`hit${p.name === selected ? ' selected' : ''}${p.name === hovered ? ' hover' : ''}${p.draw ? '' : ' nodraw'}${status.get(p.name)?.edges.length ? ' clipped' : ''}`}
+                className={`hit${p.name === selected ? ' selected' : ''}${childNames.has(p.name) ? ' child' : ''}${p.name === hovered ? ' hover' : ''}${p.draw ? '' : ' nodraw'}${status.get(p.name)?.edges.length ? ' clipped' : ''}`}
                 style={{
                   left: p.outer.x * kx,
                   top: p.outer.y * ky,
@@ -201,9 +217,34 @@ export function Stage() {
                   height: Math.max(MIN_HIT, p.outer.h) * ky,
                 }}
               >
-                {p.name === selected && <span className="hit-label">{p.name}</span>}
+                {p.name === selected && (
+                  <span className="hit-label">
+                    {p.name} · {p.outer.w}×{p.outer.h}
+                  </span>
+                )}
               </div>
             ))}
+            {links.length > 0 && (
+              <svg className="place-links" width={cssWidth} height={cssHeight}>
+                <defs>
+                  <marker id="link-start" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="6" markerHeight="6">
+                    <circle cx="5" cy="5" r="3.5" />
+                  </marker>
+                  <marker id="link-end" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M1 1 L9 5 L1 9 z" />
+                  </marker>
+                </defs>
+                {links.map(({ from, to, key }) => {
+                  const [x1, y1] = centre(from)
+                  const [x2, y2] = centre(to)
+                  return (
+                    <line key={key} className={key === 'parent' ? 'to-selected' : 'from-selected'} x1={x1} y1={y1} x2={x2} y2={y2} markerStart="url(#link-start)" markerEnd="url(#link-end)">
+                      <title>{`${to.name} is placed on ${from.name}`}</title>
+                    </line>
+                  )
+                })}
+              </svg>
+            )}
             {visible.filter((p) => status.get(p.name)?.hidden).map(marker)}
           </div>
         </div>

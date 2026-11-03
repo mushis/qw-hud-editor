@@ -33,7 +33,13 @@ function frameColor(spec: string | undefined, alpha: number): string {
 }
 
 // "proportional 1": ezQuake draws text and numbers with the loaded TTF font instead of the charset / big digits.
-const TTF = 'Arial, Helvetica, sans-serif'
+// The font_facepath TTF when one was loaded (see setHudFont), else a common sans-serif.
+const FALLBACK_TTF = 'Arial, Helvetica, sans-serif'
+let TTF = FALLBACK_TTF
+export function setHudFont(family: string | null) {
+  TTF = family ? `"${family}", ${FALLBACK_TTF}` : FALLBACK_TTF
+  onLoad()
+}
 const TTF_COLORS: Record<TextColor, string> = { white: '#f2f2f2', alt: '#d08c48', gold: '#e8c040' }
 const BIG_GLYPHS: Record<string, string> = { colon: ':', minus: '-', slash: '/' }
 
@@ -67,6 +73,23 @@ interface RenderGfx extends Gfx {
 // Coordinates are virtual pixels; drawHud sets the canvas transform to scale them.
 function makeGfx(c: CanvasRenderingContext2D): RenderGfx {
   const k = 1
+  // The charset glyphs: alt is the brown half (+128), gold turns digits into the gold ones (18-27).
+  const charsetText = (s: string, x: number, y: number, scale: number, color: TextColor | string) => {
+    const named = color === 'white' || color === 'alt' || color === 'gold'
+    const custom = getTexture(CHARSET)
+    const plain = custom ? load(custom.url) : image('assets/charsets/povo5.png')
+    if (!plain) return
+    const charset = named ? plain : tint(plain, color)
+    const cell = plain.naturalWidth / 16
+    const size = 8 * scale * k
+    for (let i = 0; i < s.length; i++) {
+      let code = s.charCodeAt(i) & 0xff
+      if (code === 32) continue
+      if (color === 'alt') code |= 0x80
+      else if (color === 'gold' && code >= 48 && code <= 57) code = code - 48 + 18
+      c.drawImage(charset, (code % 16) * cell, (code >> 4) * cell, cell, cell, (x + i * 8 * scale) * k, y * k, size, size)
+    }
+  }
   return {
     proportional: false,
     pic(name, x, y, w, h) {
@@ -86,29 +109,29 @@ function makeGfx(c: CanvasRenderingContext2D): RenderGfx {
       if (img) c.drawImage(img, x * k, y * k, w * k, h * k)
     },
     text(s, x, y, scale, color: TextColor | string = 'white') {
+      if (!this.proportional) return charsetText(s, x, y, scale, color)
+      // ezQuake's FontCreate makes TTF glyphs only for 32-127 and the gold digits 18-27, each with a brown copy
+      // at +128. Other codes ($[ $] and the rest of the fun chars) are drawn from the charset, 8 wide.
       const named = color === 'white' || color === 'alt' || color === 'gold'
-      if (this.proportional) {
-        c.save()
-        c.font = `${8 * scale * k}px ${TTF}`
-        c.textBaseline = 'top'
-        c.fillStyle = named ? TTF_COLORS[color as TextColor] : color
-        c.fillText(s, x * k, y * k)
-        c.restore()
-        return
-      }
-      const custom = getTexture(CHARSET)
-      const plain = custom ? load(custom.url) : image('assets/charsets/povo5.png')
-      if (!plain) return
-      const charset = named ? plain : tint(plain, color)
-      const cell = plain.naturalWidth / 16
-      const size = 8 * scale * k
+      const base = named ? TTF_COLORS[color as TextColor] : color
+      c.save()
+      c.font = `${8 * scale * k}px ${TTF}`
+      c.textBaseline = 'top'
+      let cx = x
       for (let i = 0; i < s.length; i++) {
-        let code = s.charCodeAt(i) & 0xff
-        if (code === 32) continue
-        if (color === 'alt') code |= 0x80
-        else if (color === 'gold' && code >= 48 && code <= 57) code = code - 48 + 18
-        c.drawImage(charset, (code % 16) * cell, (code >> 4) * cell, cell, cell, (x + i * 8 * scale) * k, y * k, size, size)
+        const code = s.charCodeAt(i) & 0xff
+        const low = code & 0x7f
+        if (low < 18 || (low >= 28 && low < 32)) {
+          charsetText(String.fromCharCode(code), cx, y, scale, color)
+          cx += 8 * scale
+          continue
+        }
+        const glyph = low < 32 ? String(low - 18) : String.fromCharCode(low)
+        c.fillStyle = low < 32 ? TTF_COLORS.gold : code >= 128 ? TTF_COLORS.alt : base
+        c.fillText(glyph, cx * k, y * k)
+        cx += c.measureText(glyph).width / k
       }
+      c.restore()
     },
     fill(x, y, w, h, color) {
       c.fillStyle = color

@@ -28,9 +28,10 @@ export function offscreen({ outer: o }: Placed, screen: Screen): { edges: Edge[]
   return { edges, hidden }
 }
 
-// Settings ezQuake takes below 0: positions, draw order, the game clock offset and the frags cell spacing.
+// Settings ezQuake takes below 0: positions, draw order, the game clock offset, the frags cell spacing and
+// fps drop (only fps has it).
 // Everything else is a size, count, style or colour.
-const NEGATIVE_OK = new Set(['pos_x', 'pos_y', 'order', 'offset', 'space_x', 'space_y'])
+const NEGATIVE_OK = new Set(['pos_x', 'pos_y', 'order', 'offset', 'space_x', 'space_y', 'drop'])
 // Values that look numeric but are free text.
 export const TEXT_PARAMS = /format|layout|text$|filter|^name$|picture/
 const NUMBER = /^\s*-?(\d+\.?\d*|\.\d+)\s*$/

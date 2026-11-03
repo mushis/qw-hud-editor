@@ -9,6 +9,8 @@ import { decodePcx, decodeTga, decodeWad } from '../render/decode'
 import { texturePriority } from '../render/textures'
 import { builtinMask, builtinPixels, crosshairFromCvars } from '../render/crosshair'
 import { findIssues } from './issues'
+import { checkEncoding } from './encoding'
+import { placeTree } from './layout'
 import { frameExtents, layoutHud, screenFor, shouldShow, viewRect, wouldCycle } from './layout'
 import { DEFAULT_PREVIEW } from './preview'
 
@@ -314,5 +316,46 @@ describe('crosshair', () => {
     expect(at(builtinMask(4, 8), 8)).toEqual([[3, 3]]) // dot
     expect(at(builtinMask(3, 8), 8)).toHaveLength(5) // small cross: centre plus one each way
     expect(at(builtinMask(2, 8), 8)).toHaveLength(8) // stipple: every other pixel down and across column/row 3
+  })
+})
+
+describe('cfg encoding', () => {
+  const bytes = (s: string) => new Uint8Array([...s].map((c) => c.charCodeAt(0)))
+  const utf8 = (s: string) => new TextEncoder().encode(s)
+
+  it('leaves plain and Quake-byte cfgs alone', () => {
+    expect(checkEncoding(bytes('hud_clock_show "1"\nhud_score_bar_format_small "$[%D$]"\n'))).toBeNull()
+    expect(checkEncoding(bytes('hud_group1_name "\xe8\xe5\xec\xec\xef"\n'))).toBeNull() // brown "hello"
+  })
+
+  it('finds UTF-8 in HUD lines and turns it back into Quake bytes', () => {
+    const issue = checkEncoding(utf8('name "é"\nhud_group1_name "èå"\n'))
+    expect(issue?.kind).toBe('utf8')
+    expect(issue?.cvars).toEqual(['hud_group1_name'])
+    expect(issue?.fixed).toBe('name "\xe9"\nhud_group1_name "\xe8\xe5"\n')
+  })
+
+  it('ignores UTF-8 outside HUD lines', () => {
+    expect(checkEncoding(utf8('name "é"\nhud_clock_show 1\n'))).toBeNull()
+  })
+
+  it('reports a BOM before a HUD cvar, and UTF-16', () => {
+    expect(checkEncoding(new Uint8Array([0xef, 0xbb, 0xbf, ...bytes('hud_clock_show 1\n')]))).toMatchObject({ kind: 'bom', cvars: ['hud_clock_show'] })
+    const u16 = new Uint8Array([0xff, 0xfe, ...[...'hud_clock_show 1\n'].flatMap((c) => [c.charCodeAt(0), 0])])
+    expect(checkEncoding(u16)).toMatchObject({ kind: 'utf16', fixed: 'hud_clock_show 1\n' })
+  })
+})
+
+describe('place tree', () => {
+  it('lists each element once, under the one it is placed on', () => {
+    const doc = { globals: {}, elements: { face: { place: 'screen' }, armor: { place: 'face' }, iarmor: { place: 'armor' }, health: { place: '@face' }, a: { place: 'b' }, b: { place: 'a' } } }
+    expect(placeTree(doc, ['face', 'armor', 'iarmor', 'health', 'a', 'b'])).toEqual([
+      { name: 'face', depth: 0 },
+      { name: 'armor', depth: 1 },
+      { name: 'iarmor', depth: 2 },
+      { name: 'health', depth: 1 },
+      { name: 'a', depth: 0 },
+      { name: 'b', depth: 1 },
+    ])
   })
 })
