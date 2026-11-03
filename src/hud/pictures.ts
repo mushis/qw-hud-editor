@@ -27,6 +27,18 @@ export function setCustomPictures(pictures: Record<string, Picture>) {
   custom = pictures
 }
 
+// Every picture a group can show now: the editor's own, then the ones the user loaded (later ones win).
+export function availablePictures(): (Picture & { name: string; own: boolean })[] {
+  const own = Object.entries(PICTURES).filter(([name]) => !custom[name])
+  return [
+    ...own.map(([name, p]) => ({ ...p, name, own: true })),
+    ...Object.entries(custom)
+      .filter(([name]) => !name.startsWith('#')) // the charset and crosshair aren't gfx pictures
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, p]) => ({ ...p, name, own: false })),
+  ]
+}
+
 export function findPicture(value: string | undefined): Picture | undefined {
   const name = pictureName(value)
   return custom[name] ?? PICTURES[name]

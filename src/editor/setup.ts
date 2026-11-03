@@ -2,7 +2,7 @@
 // crosshair and HUD pictures it uses. Files are read in the browser; nothing is uploaded.
 import { lastValues } from '../hud/cfg'
 import { crosshairFromCvars } from '../render/crosshair'
-import { importKind, isHudPicture, removeKind, texturePriority, type PathFile } from '../render/textures'
+import { importKind, isHudPicture, previewImage, removeKind, texturePriority, type PathFile } from '../render/textures'
 import { useStore } from '../store'
 import { importCfg } from './actions'
 import { readCfgFile } from './cfgFile'
@@ -113,15 +113,15 @@ async function findImage(root: Folder, folders: string[], name: string): Promise
   return null
 }
 
-// The HUD pictures in textures/wad; for a name in both folders, or with several extensions, the one ezQuake uses.
-async function wadPictures(root: Folder): Promise<PathFile[]> {
+// The HUD pictures (num_0, face1, sb_shells…) in these folders, first ones first; for a name in several of them,
+// or with several extensions, the one ezQuake uses.
+async function hudPictures(folders: { dir: Folder | null; path: string }[]): Promise<PathFile[]> {
   const best = new Map<string, { rank: number; entry: Entry; path: string }>()
-  for (const [g, game] of GAMEDIRS.entries()) {
-    const dir = await folderAt(root, `${game}/textures/wad`)
-    for (const entry of dir ? (await dir.entries()).values() : []) {
+  for (const [g, { dir, path: folder }] of folders.entries()) {
+    for (const entry of dir ? (await entriesOf(dir)).values() : []) {
       const m = entry.name.toLowerCase().match(/^(.+)\.(tga|png|jpe?g|pcx)$/)
       if (!('file' in entry) || !m || !isHudPicture(m[1]) || /_(luma|glow)$/.test(m[1])) continue
-      const path = `${game}/textures/wad/${entry.name}`
+      const path = `${folder}/${entry.name}`
       const rank = g * 100 + texturePriority(path)
       if (!best.has(m[1]) || rank < best.get(m[1])!.rank) best.set(m[1], { rank, entry, path })
     }
@@ -129,10 +129,16 @@ async function wadPictures(root: Folder): Promise<PathFile[]> {
   return Promise.all([...best.values()].map(async ({ entry, path }) => ({ path, file: await (entry as { file: () => Promise<File> }).file() })))
 }
 
+// The HUD pictures in textures/wad, ezquake's before qw's.
+const wadPictures = async (root: Folder) =>
+  hudPictures(await Promise.all(GAMEDIRS.map(async (game) => ({ dir: await folderAt(root, `${game}/textures/wad`), path: `${game}/textures/wad` }))))
+
 export interface SetupResult {
   ok: boolean
   lines: string[] // what was loaded or kept, one line each
   needConfig?: boolean // the folder is fine but its cfg can't be opened from it: ask for the file
+  canSkipConfig?: boolean // the folder is fine but no config was imported: the user may go on without one
+  charsets?: CharsetChoice[] // a folder of charsets: the user picks one
 }
 
 const fileName = (f: PathFile) => f.path.split('/').pop()!
@@ -169,6 +175,36 @@ async function findQuakeRoot(chosen: Folder): Promise<{ dir: Folder; path: strin
   return best
 }
 
+export interface CharsetChoice {
+  name: string // file name without extension, as loadcharset takes it
+  file: PathFile
+  url: string // preview; revoked by the dialog
+  w: number
+  h: number
+}
+
+// Images that can be a charset (square, at least 64 pixels, a 16×16 grid of characters), up to 64 of them.
+async function charsetFiles(folders: { dir: Folder | null; path: string }[]): Promise<CharsetChoice[]> {
+  const out: CharsetChoice[] = []
+  for (const { dir, path } of folders) {
+    for (const e of dir ? (await entriesOf(dir)).values() : []) {
+      const m = e.name.match(/^(.+)\.(tga|png|jpe?g|webp|pcx)$/i)
+      if (!('file' in e) || !m || isHudPicture(m[1].toLowerCase()) || /_(luma|glow)$/i.test(m[1]) || out.length >= 64) continue
+      const file = { path: `${path}/${e.name}`, file: await e.file() }
+      const img = await previewImage(file.path, file.file)
+      if (img && img.w === img.h && img.w >= 64) out.push({ name: m[1], file, ...img })
+      else if (img) URL.revokeObjectURL(img.url)
+    }
+  }
+  return out
+}
+
+// Loads the charset the user picked from a folder of them.
+export async function importCharset(choice: CharsetChoice): Promise<string> {
+  await importKind('charset', choice.name, [choice.file])
+  return `Charset: ${choice.file.path.split('/').pop()}.`
+}
+
 // ezquake/configs/config.cfg is where ezQuake saves it; older setups keep it in qw or the other folders.
 const CONFIG_FOLDERS = ['ezquake/configs', 'qw/configs', 'ezquake', 'qw', 'id1']
 
@@ -189,11 +225,32 @@ async function findConfig(root: Folder): Promise<PathFile | null> {
 }
 
 // `config`: the cfg the user picked on its own, when the folder couldn't give it (see needConfig).
-export async function importSetup(chosen: Folder, chosenName = '', config?: File): Promise<SetupResult> {
+// `skipConfig`: go on without a config (see canSkipConfig).
+export async function importSetup(chosen: Folder, chosenName = '', config?: File, skipConfig = false): Promise<SetupResult> {
   openErrors.length = 0
   const found = await findQuakeRoot(chosen)
   if (!found) {
-    const inside = /^(id1|qw|ezquake)$/i.test(chosenName) ? ` You chose the ${chosenName} folder: choose the folder that holds it.` : ' Choose your Quake folder.'
+    // Not a Quake folder, but HUD pictures (a wad folder: num_0, anum_5, face1…) and/or charsets, in it or in
+    // its wad and charsets subfolders (a textures folder): the pictures are loaded, a charset is picked.
+    const here = chosenName || 'folder'
+    const pictures = await hudPictures([
+      { dir: chosen, path: here },
+      { dir: await folderAt(chosen, 'wad'), path: `${here}/wad` },
+    ])
+    const lines: string[] = []
+    if (pictures.length) {
+      const names = await importKind('wad', chosenName || 'HUD pictures', pictures)
+      lines.push(`HUD pictures: ${names.length} loaded from ${chosenName || 'this folder'}.`)
+    }
+    const charsets = await charsetFiles([
+      { dir: chosen, path: here },
+      { dir: await folderAt(chosen, 'charsets'), path: `${here}/charsets` },
+    ])
+    if (charsets.length) return { ok: false, charsets, lines: [...lines, `Charsets: ${charsets.length} found. Choose the one to use, or skip.`] }
+    if (lines.length) return { ok: true, lines: [...lines, 'Config, charset and crosshair: none here, so the HUD and the current ones stay.'] }
+    const inside = /^(id1|qw|ezquake)$/i.test(chosenName)
+      ? ` You chose the ${chosenName} folder: choose the folder that holds it.`
+      : ' Choose your Quake folder, or a folder of HUD pictures (num_0, face1…) or charsets.'
     // What the browser could see, to tell a wrong folder from one it can't read.
     const seen = [...(await entriesOf(chosen)).values()].filter((e) => 'folder' in e).map((e) => e.name)
     const listed = seen.length ? ` Folders the browser sees in ${chosenName || 'it'}: ${seen.slice(0, 12).join(', ')}${seen.length > 12 ? '…' : ''}.` : ` The browser sees no folders in ${chosenName || 'it'}.`
@@ -201,6 +258,17 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
   }
   const root = found.dir
   const where = found.path ? ` in ${found.path}` : ''
+  // Without a config (the user chose to go on without one), the HUD stays as it is and only the folder's HUD
+  // pictures are loaded: which charset and crosshair to use is in the config.
+  if (skipConfig) {
+    const lines = [
+      ...(where ? [`Quake folder found${where}.`] : []),
+      'Config: not imported, so the HUD and its settings stay as they are.',
+      'Charset and crosshair: the config names them, so the current ones stay.',
+    ]
+    lines.push(await loadWad(root))
+    return { ok: true, lines }
+  }
   const cfg = config ? { path: config.name, file: config } : await findConfig(root)
   // Chrome doesn't let a site open .cfg files in a folder from the folder picker: they are left out of its
   // listings, and opening one by name is refused ("Name is not allowed", a TypeError). A file input can open it.
@@ -208,6 +276,7 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
     return {
       ok: false,
       needConfig: true,
+      canSkipConfig: true,
       lines: [
         `Found the Quake folder${where}, but the browser doesn't let this site open .cfg files in a folder chosen this way. ` +
           `Choose the config file itself: config.cfg in ${chosenName || 'your Quake folder'}${where ? `/${found.path}` : ''}/ezquake/configs. Or drop the Quake folder on the box instead.`,
@@ -225,6 +294,7 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
     const listing = openErrors.filter((e) => e.includes('/ listing:'))
     return {
       ok: false,
+      canSkipConfig: true,
       lines: [
         `Found the Quake folder${where}, but no config.cfg in ezquake/configs, qw/configs, ezquake, qw or id1, and no other cfg in a configs folder.` +
           (await list('ezquake')) +
@@ -237,7 +307,7 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
   }
 
   const text = await readCfgFile(cfg.file)
-  if (text === null) return { ok: false, lines: ['Import cancelled.'] }
+  if (text === null) return { ok: false, canSkipConfig: true, lines: ['The config was not imported.'] }
   const lines = [
     ...(where ? [`Quake folder found${where}.`] : []),
     ...(config ? [`Config: ${config.name}, chosen on its own.`] : key(cfg.path) === 'ezquake/configs/config.cfg' ? [] : [`Config: ${cfg.path}.`]),
@@ -276,8 +346,12 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
     lines.push(`Crosshair: "${crosshair}" isn't in crosshairs, so the current one stays.`)
   }
 
+  lines.push(await loadWad(root))
+  return { ok: true, lines }
+}
+
+async function loadWad(root: Folder): Promise<string> {
   const wad = await wadPictures(root)
   const names = wad.length ? await importKind('wad', 'textures/wad', wad) : []
-  lines.push(names.length ? `HUD pictures: ${names.length} from textures/wad.` : 'HUD pictures: none in textures/wad, so the current ones stay.')
-  return { ok: true, lines }
+  return names.length ? `HUD pictures: ${names.length} from textures/wad.` : 'HUD pictures: none in textures/wad, so the current ones stay.'
 }

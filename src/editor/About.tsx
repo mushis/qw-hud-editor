@@ -79,7 +79,9 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
         </li>
         <li>
           <b>View as</b> previews the HUD as a player, a spectator or in a demo. Elements that don't show in that view are in italics in the
-          list. Tags mark elements that only show when spectating (<i>spec</i>), in demos (<i>demo</i>) or on the scoreboard (<i>score</i>).
+          list. Tags mark elements that only show when spectating (<i>spec</i>), in demos (<i>demo</i>) on the scoreboard (<i>score</i>) or during a map vote (<i>vote</i>),
+          and the elements and settings only unezquake has (<i>unez</i>: <code>totalstrength</code>, <code>mapvote</code>, the armor
+          <code>text_color_*</code>); ezQuake ignores those.
         </li>
         <li>
           <b>Issues</b>, under the screen, lists enabled elements that won't look as intended: off-screen or cut off, hidden because they

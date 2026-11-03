@@ -341,7 +341,17 @@ export interface ComboOption {
 
 // Text box with a filtered list of suggestions. Typing filters by value or label; arrows move,
 // Enter picks the highlighted one (or keeps what was typed), Escape gives up.
-export function Combobox({ value, options, onChange }: { value: string; options: ComboOption[]; onChange: (v: string) => void }) {
+export function Combobox({
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  options: ComboOption[]
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
   const [active, setActive] = useState(0)
@@ -385,6 +395,7 @@ export function Combobox({ value, options, onChange }: { value: string; options:
     <div className="combo" ref={ref}>
       <input
         value={draft}
+        placeholder={placeholder}
         onFocus={(e) => {
           e.target.select()
           show()

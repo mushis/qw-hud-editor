@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CATEGORY_LABELS, ELEMENTS, type Category, type Condition } from '../hud/catalog'
+import { isUnezquakeElement } from '../hud/defaults'
 import { placeTree, shouldShow } from '../hud/layout'
 import { useStore } from '../store'
 import { useHudLayout } from './useHudLayout'
@@ -11,6 +12,7 @@ const CONDITION_TAGS: Partial<Record<Condition, [string, string]>> = {
   spectator: ['spec', 'Only shown when spectating or watching a demo'],
   demo: ['demo', 'Only shown during demo / MVD / QTV playback'],
   intermission: ['score', 'Only shown on the scoreboard / intermission'],
+  vote: ['vote', 'Only shown for 10 seconds when a player suggests a map before a match'],
 }
 
 function Item({ name, description, condition, depth }: { name: string; description: string; condition: Condition; depth?: number }) {
@@ -45,6 +47,11 @@ function Item({ name, description, condition, depth }: { name: string; descripti
         {depth ? <span className="tree-branch">└ </span> : null}
         {name}
       </span>
+      {isUnezquakeElement(name) && (
+        <em className="tag unez" title="Only in unezquake: ezQuake doesn't have this element and ignores its settings">
+          unez
+        </em>
+      )}
       {tag && (
         <em className="tag" title={tag[1]}>
           {tag[0]}
@@ -58,6 +65,7 @@ export function Palette() {
   const [filter, setFilter] = useState('')
   const doc = useStore((s) => s.doc)
   const tree = useStore((s) => s.settings.paletteTree)
+  const collapsed = useStore((s) => s.settings.paletteCollapsed)
   const setSettings = useStore((s) => s.setSettings)
   const q = filter.trim().toLowerCase()
   const matches = ELEMENTS.filter((e) => !q || e.name.includes(q) || e.description.toLowerCase().includes(q))
@@ -80,6 +88,17 @@ export function Palette() {
     return rows.filter((r) => keep.has(r.name))
   }
 
+  if (collapsed) {
+    return (
+      <nav className="palette collapsed">
+        <button className="palette-expand" onClick={() => setSettings({ paletteCollapsed: false })} title="Show the element list" aria-label="Show the element list">
+          <span>›</span>
+          <span className="palette-expand-label">Elements</span>
+        </button>
+      </nav>
+    )
+  }
+
   return (
     <nav className="palette">
       <div className="palette-head">
@@ -95,6 +114,14 @@ export function Palette() {
               ✕
             </button>
           )}
+          <button
+            className="palette-collapse"
+            onClick={() => setSettings({ paletteCollapsed: true })}
+            title="Hide the element list (more room for the screen)"
+            aria-label="Hide the element list"
+          >
+            ‹
+          </button>
         </div>
         <label className="palette-tree" title="List each element under the element its place puts it on (place = an element name or @name).">
           <input

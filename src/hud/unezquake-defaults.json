@@ -1,0 +1,49 @@
+{
+  "source": "dusty-qw/unezquake@54b101aebb5387d7488a4458b54ef713d334ca0d",
+  "note": "HUD cvars unezquake registers that ezQuake does not (dusty-qw/unezquake). Merged into the defaults by defaults.ts.",
+  "elements": {
+    "mapvote": {
+      "order": "0",
+      "show": "1",
+      "place": "screen",
+      "pos_x": "0",
+      "align_x": "right",
+      "pos_y": "50",
+      "align_y": "top",
+      "frame": "0.2",
+      "frame_color": "10 10 10 160",
+      "item_opacity": "1",
+      "draw": "1",
+      "scale": "1"
+    },
+    "totalstrength": {
+      "order": "0",
+      "show": "0",
+      "place": "screen",
+      "pos_x": "0",
+      "align_x": "left",
+      "pos_y": "0",
+      "align_y": "top",
+      "frame": "0",
+      "frame_color": "0 0 0",
+      "item_opacity": "1",
+      "draw": "1",
+      "style": "0",
+      "scale": "1",
+      "align": "right",
+      "digits": "3",
+      "proportional": "0"
+    }
+  },
+  "params": {
+    "armor": {
+      "text_color_none": "",
+      "text_color_ga_low": "",
+      "text_color_ga_normal": "",
+      "text_color_ya_low": "",
+      "text_color_ya_normal": "",
+      "text_color_ra_low": "",
+      "text_color_ra_normal": ""
+    }
+  }
+}

@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { offscreen } from '../hud/issues'
 import type { Placed } from '../hud/layout'
 import { drawHud, setAssetListener } from '../render/renderer'
 import { CUSTOM_BACKGROUND, useCustomBackground, useTextures } from '../render/textures'
 import { useStore } from '../store'
+import { StageMenu } from './StageMenu'
 import { useHudLayout } from './useHudLayout'
 
 interface Drag {
@@ -108,6 +109,13 @@ export function Stage() {
   const links: { from: Placed; to: Placed; key: string }[] = []
   if (sel && selParent && placed.get(selParent)) links.push({ from: placed.get(selParent)!, to: sel, key: 'parent' })
   for (const c of children) links.push({ from: sel!, to: c, key: c.name })
+
+  // "Groups": each shown group as a labelled outline in its own colour, and the elements placed on it tinted
+  // in that colour (a group placed on a group gets the colour of its own outline, and tints its parent's).
+  const groups = settings.showGroups ? visible.filter((p) => /^group\d$/.test(p.name)) : []
+  const groupColor = (name: string) => `hsl(${(Number(name.slice(5)) * 67 + 250) % 360} 65% 62%)`
+  const members = groups.length ? visible.filter((p) => groups.some((g) => parentOf(p.name) === g.name)) : []
+  const attached = (group: string) => Object.keys(doc.elements).filter((n) => parentOf(n) === group).length
   const status = new Map(visible.filter((p) => p.draw).map((p) => [p.name, offscreen(p, screen)]))
 
   // Off-screen elements get a marker on the nearest screen edge, pointing at them.
@@ -136,7 +144,10 @@ export function Stage() {
   }
 
   // Elements under the pointer, topmost (last drawn) first.
-  const hitStack = (e: React.PointerEvent): string[] => {
+  const [menu, setMenu] = useState<{ name: string; x: number; y: number } | null>(null)
+  const closeMenu = useCallback(() => setMenu(null), [])
+
+  const hitStack = (e: { clientX: number; clientY: number }): string[] => {
     const r = overlayRef.current!.getBoundingClientRect()
     const x = (e.clientX - r.left) / kx
     const y = (e.clientY - r.top) / ky
@@ -206,6 +217,16 @@ export function Stage() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerLeave={() => setHovered(null)}
+            onContextMenu={(e) => {
+              // Right click: offer moves for the selected element when it is under the pointer (even below
+              // others), else for the top element there, which gets selected.
+              e.preventDefault()
+              const stack = hitStack(e)
+              const name = selected && stack.includes(selected) ? selected : stack[0]
+              if (!name) return setMenu(null)
+              select(name)
+              setMenu({ name, x: e.clientX, y: e.clientY })
+            }}
           >
             {visible.map((p) => (
               <div
@@ -223,6 +244,36 @@ export function Stage() {
                     {p.name} · {p.outer.w}×{p.outer.h}
                   </span>
                 )}
+              </div>
+            ))}
+            {members.map((p) => (
+              <div
+                key={`member-${p.name}`}
+                className="group-member"
+                style={{
+                  left: p.outer.x * kx,
+                  top: p.outer.y * ky,
+                  width: Math.max(MIN_HIT, p.outer.w) * kx,
+                  height: Math.max(MIN_HIT, p.outer.h) * ky,
+                  ['--group' as string]: groupColor(parentOf(p.name)!),
+                }}
+              />
+            ))}
+            {groups.map((g) => (
+              <div
+                key={`group-${g.name}`}
+                className="group-outline"
+                style={{
+                  left: g.outer.x * kx,
+                  top: g.outer.y * ky,
+                  width: Math.max(MIN_HIT, g.outer.w) * kx,
+                  height: Math.max(MIN_HIT, g.outer.h) * ky,
+                  ['--group' as string]: groupColor(g.name),
+                }}
+              >
+                <span>
+                  {g.name} · {attached(g.name) === 1 ? '1 attached' : `${attached(g.name)} attached`}
+                </span>
               </div>
             ))}
             {links.length > 0 && (
@@ -260,6 +311,15 @@ export function Stage() {
           </div>
         </div>
       </div>
+      <div className="zoom stage-groups">
+        <button
+          className={settings.showGroups ? 'active' : undefined}
+          onClick={() => setSettings({ showGroups: !settings.showGroups })}
+          title="Outline every shown group, with what is placed on it"
+        >
+          Groups
+        </button>
+      </div>
       <div className="zoom" title="Zoom">
         {ZOOMS.map((z) => (
           <button key={z} className={z === zoom ? 'active' : undefined} onClick={() => setSettings({ zoom: z })}>
@@ -267,6 +327,7 @@ export function Stage() {
           </button>
         ))}
       </div>
+      {menu && <StageMenu name={menu.name} x={menu.x} y={menu.y} onClose={closeMenu} />}
     </div>
   )
 }

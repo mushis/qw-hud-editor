@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ELEMENTS } from './catalog'
 import { lastValues, parseCfg, serializeCfg, splitCvar } from './cfg'
-import { EZQUAKE_DEFAULTS, withDefaults } from './defaults'
+import { EZQUAKE_DEFAULTS, isUnezquakeElement, isUnezquakeParam, withDefaults } from './defaults'
 import { IMPLS, implFor } from './elements'
 import { decodePcx, decodeTga, decodeWad } from '../render/decode'
 import { texturePriority } from '../render/textures'
@@ -357,5 +357,22 @@ describe('place tree', () => {
       { name: 'a', depth: 0 },
       { name: 'b', depth: 1 },
     ])
+  })
+})
+
+describe('unezquake', () => {
+  it('has totalstrength and mapvote, and the armor text colours', () => {
+    expect(isUnezquakeElement('totalstrength') && isUnezquakeElement('mapvote')).toBe(true)
+    expect(isUnezquakeParam('armor', 'text_color_ra_low')).toBe(true)
+    expect(isUnezquakeParam('armor', 'style')).toBe(false)
+    const { doc } = parseCfg('hud_totalstrength_show 1\nhud_mapvote_scale 2\nhud_armor_text_color_ra_normal "255 0 0"\n')
+    expect(doc.elements.totalstrength).toEqual({ show: '1' })
+    expect(doc.elements.armor).toEqual({ text_color_ra_normal: '255 0 0' })
+  })
+
+  it('sizes total strength like the other numbers, and the map vote box', () => {
+    const ctx = { preview: DEFAULT_PREVIEW, screenW: 640, screenH: 480 }
+    expect(implFor('totalstrength').size(EZQUAKE_DEFAULTS.totalstrength, ctx)).toEqual({ w: 72, h: 24 })
+    expect(implFor('mapvote').size(EZQUAKE_DEFAULTS.mapvote, ctx)).toEqual({ w: 208, h: 132 })
   })
 })

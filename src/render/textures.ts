@@ -128,6 +128,34 @@ export async function removeTextureSet(id: string) {
   await tx('sets', 'readwrite', (s) => s.delete(id)).catch(() => {})
 }
 
+// Removes one texture from a set (the whole set when it was the last one).
+export async function removeTexture(setId: string, name: string) {
+  const set = useTextures.getState().sets.find((s) => s.id === setId)
+  if (!set) return
+  if (set.names.length <= 1) return removeTextureSet(setId)
+  const key = `${setId}/${name}`
+  const r = records.get(key)
+  if (r) URL.revokeObjectURL(r.url)
+  records.delete(key)
+  const next = { ...set, names: set.names.filter((n) => n !== name) }
+  rebuild(useTextures.getState().sets.map((s) => (s.id === setId ? next : s)))
+  await tx('textures', 'readwrite', (s) => s.delete(key)).catch(() => {})
+  await tx('sets', 'readwrite', (s) => s.put(next)).catch(() => {})
+}
+
+export async function removeAllTextures() {
+  for (const set of [...useTextures.getState().sets]) await removeTextureSet(set.id)
+}
+
+// A set's textures, for previews. `shown` is false when a newer set replaces that name.
+export function texturesOf(set: TextureSet): (Picture & { name: string; shown: boolean })[] {
+  const { textures } = useTextures.getState()
+  return set.names.flatMap((name) => {
+    const r = records.get(`${set.id}/${name}`)
+    return r ? [{ name, url: r.url, w: r.w, h: r.h, shown: textures[name]?.url === r.url }] : []
+  })
+}
+
 // ---------------------------------------------------------------- uploaded background
 
 // The settings only say "custom"; the image itself is kept here (too big for localStorage).
@@ -199,7 +227,7 @@ export async function removeHudFont() {
 
 // ---------------------------------------------------------------- importing
 
-const IMAGE = /\.(png|tga|jpe?g|webp|pcx)$/i
+const IMAGE = /\.(png|tga|jpe?g|webp|gif|bmp|pcx)$/i
 // Status bar pictures, as named in gfx.wad and textures/wad/.
 const HUD_PIC = /^(a?num_|face|inv|sb_|ibar|sbar|disc|net$|ram$|turtle$|backtile$)/
 export const isHudPicture = (name: string) => HUD_PIC.test(name)
@@ -234,6 +262,16 @@ async function fromImage(path: string, data: Uint8Array): Promise<Stored | null>
   }
   const name = baseName(path)
   return { name: isCharset(path, name, w, h) ? CHARSET : name, blob, w, h }
+}
+
+// An image file decoded for a preview (TGA and PCX too): an object URL the caller revokes, and its size.
+export async function previewImage(path: string, file: File): Promise<{ url: string; w: number; h: number } | null> {
+  try {
+    const img = await fromImage(path, new Uint8Array(await file.arrayBuffer()))
+    return img && { url: URL.createObjectURL(img.blob), w: img.w, h: img.h }
+  } catch {
+    return null
+  }
 }
 
 async function fromWad(data: Uint8Array): Promise<Stored[]> {
@@ -281,7 +319,7 @@ async function collect(path: string, data: Uint8Array, nested: boolean, out: Col
   }
 }
 
-export const isTextureFile = (name: string) => /\.(png|tga|jpe?g|webp|wad|zip|pk3)$/i.test(name)
+export const isTextureFile = (name: string) => /\.(png|tga|jpe?g|webp|gif|bmp|pcx|wad|zip|pk3)$/i.test(name)
 
 // A dropped or picked file, with its path inside a dropped folder ("wad/num_0.tga").
 export interface PathFile {

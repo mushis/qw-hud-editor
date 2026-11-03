@@ -1,4 +1,5 @@
-// Every HUD element registered by ezQuake (HUD_Register calls in src/hud*.c).
+// Every HUD element registered by ezQuake (HUD_Register calls in src/hud*.c), and the ones only unezquake has
+// (totalstrength, mapvote; see isUnezquakeElement).
 
 export type Category =
   | 'status'
@@ -19,6 +20,7 @@ export type Condition =
   | 'spectator' // spectating or demo playback
   | 'demo' // demo (or MVD) playback only
   | 'intermission' // intermission / scoreboard only
+  | 'vote' // for 10 s after a player suggests a map, before a match (unezquake's mapvote)
 
 export type ViewMode = 'player' | 'spectator' | 'demo'
 
@@ -67,6 +69,7 @@ export const ELEMENTS: ElementDef[] = [
   el('bar_armor', 'status', 'Armor bar', 'player'),
   el('healthdamage', 'status', 'Health damage taken', 'player', true),
   el('armordamage', 'status', 'Armor damage taken', 'player', true),
+  el('totalstrength', 'status', 'Total strength: the damage you can take, from health and armor', 'player', true),
 
   el('ammo', 'inventory', 'Ammo for the active weapon', 'player', true),
   el('iammo', 'inventory', 'Icon of the active ammo', 'player', true),
@@ -125,6 +128,7 @@ export const ELEMENTS: ElementDef[] = [
   el('speed2', 'misc', 'Speed gauge'),
   el('weaponstats', 'misc', 'Weapon accuracy'),
   el('keys', 'misc', 'Pressed movement keys'),
+  el('mapvote', 'misc', 'Map vote box: shown for 10 s before a match when a player suggests a map', 'vote'),
 
   ...range('group', 1, 9).map((n) => el(n, 'groups', `Group ${n.slice(-1)}: box/picture used as anchor or background`, 'always', true)),
 ]
@@ -145,6 +149,7 @@ export function isActiveIn(def: ElementDef, mode: ViewMode): boolean {
     case 'demo':
       return mode === 'demo'
     case 'intermission':
+    case 'vote':
       return false
   }
 }

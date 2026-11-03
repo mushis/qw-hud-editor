@@ -2,6 +2,7 @@
 // Elements marked "mock" draw an approximation with a plausible size.
 
 import type { Params } from './cfg'
+import { parseRgb } from './colors'
 import type { Rect, Size } from './layout'
 import { findPicture, pictureName } from './pictures'
 import { activeAmmo, PLAYERS, type Preview } from './preview'
@@ -79,7 +80,12 @@ function rgba(spec: string | undefined, alphaFallback = 1): string {
 // ---------------------------------------------------------------- numbers
 
 // SCR_HUD_DrawNum: style 0/2 big 24px digits, 1 small text, 3 small golden digits.
-function numberImpl(value: (ctx: Ctx) => number, low: (v: number) => boolean = () => false): ElementImpl {
+// `color`: an own colour for the text styles (1 and 3), normal or low, as unezquake's text_color_* settings.
+function numberImpl(
+  value: (ctx: Ctx) => number,
+  low: (v: number, ctx: Ctx) => boolean = () => false,
+  color: (p: Params, ctx: Ctx, low: boolean) => string | null = () => null,
+): ElementImpl {
   const layout = (p: Params, ctx: Ctx) => {
     const v = Math.trunc(value(ctx))
     const style = int(p.style)
@@ -89,7 +95,8 @@ function numberImpl(value: (ctx: Ctx) => number, low: (v: number) => boolean = (
     if (digits > 0 && s.length > digits) s = s.slice(-digits) // hud_digits_trim 1
     const cw = (big ? 24 : 8) * scaleOf(p)
     const boxChars = digits > 0 ? digits : s.length
-    return { s, big, style, cw, box: boxChars * cw, low: low(v) }
+    const isLow = low(v, ctx)
+    return { s, big, style, cw, box: boxChars * cw, low: isLow, color: big ? null : color(p, ctx, isLow) }
   }
   return {
     size(p, ctx) {
@@ -106,7 +113,7 @@ function numberImpl(value: (ctx: Ctx) => number, low: (v: number) => boolean = (
           const glyph = ch === '-' ? 'minus' : ch
           g.pic(`${l.low ? 'anum' : 'num'}_${glyph}`, x, r.y, l.cw, l.cw)
         } else {
-          g.text(ch, x, r.y, scaleOf(p), l.style === 3 ? 'gold' : l.low ? 'alt' : 'white')
+          g.text(ch, x, r.y, scaleOf(p), l.color ?? (l.low ? 'alt' : l.style === 3 ? 'gold' : 'white'))
         }
         x += l.cw
       }
@@ -725,10 +732,55 @@ const speedImpl = boxImpl(
   },
 )
 
+// unezquake's armor text_color_<type>_low / _normal (text_color_none without armor); empty means the usual colours.
+function armorTextColor(p: Params, ctx: Ctx, low: boolean): string | null {
+  const type = ctx.preview.armor > 0 ? ['ga', 'ya', 'ra'][ctx.preview.armorType - 1] : null
+  const spec = type ? p[`text_color_${type}_${low ? 'low' : 'normal'}`] : p.text_color_none
+  const rgb = spec ? parseRgb(spec) : null
+  return rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : null
+}
+
+// unezquake's total strength (SCR_HUD_TotalStrength): min(health / (1 - absorption), health + armor), red when
+// health is low.
+const ABSORPTION = [0, 0.3, 0.6, 0.8]
+const totalStrength = (ctx: Ctx) => {
+  const { health, armor, armorType } = ctx.preview
+  return Math.max(0, Math.min(health / (1 - (armor > 0 ? ABSORPTION[armorType] : 0)), health + armor))
+}
+
+// unezquake's map vote (hud_mapvote.c): "map vote for <map>", "use /agree to vote" and a 200×112 picture of the
+// map, in a box; ezQuake shows it for 10 s during a prewar vote. The map picture is a stand-in here.
+const MAPVOTE: ElementImpl = (() => {
+  const metrics = (p: Params) => {
+    const s = Math.min(10, Math.max(0.1, scaleOf(p)))
+    const text = Math.trunc(8 * s)
+    const padX = Math.trunc(4 * s)
+    const padY = Math.trunc(2 * s)
+    return { s, text, padX, padY, w: 200 + padX * 2, h: text * 2 + padY * 2 + 112 }
+  }
+  return {
+    size(p) {
+      const m = metrics(p)
+      return { w: m.w, h: m.h }
+    },
+    draw(g, p, _ctx, r) {
+      const m = metrics(p)
+      g.fill(r.x, r.y, m.w, m.h, 'rgba(10,10,10,0.63)') // scr_mapvote_frame_color "10 10 10 160"
+      g.text('map vote for dm2', r.x + m.padX, r.y + m.padY, m.s)
+      g.text('use /agree to vote', r.x + m.padX, r.y + m.padY + m.text, m.s)
+      const top = r.y + m.padY + m.text * 2
+      g.fill(r.x + m.padX, top, 200, 112, '#3b3227')
+      g.text('dm2', r.x + m.padX + 100 - 12, top + 52, 1, 'alt')
+    },
+  }
+})()
+
 export const IMPLS: Record<string, ElementImpl> = {
   face: picImpl((_p, c) => `face${faceIndex(c.preview.health)}`, 24, 24, () => 'f', () => true),
   health: numberImpl((c) => c.preview.health, (v) => v <= 25),
-  armor: numberImpl((c) => c.preview.armor, (v) => v <= 25),
+  armor: numberImpl((c) => c.preview.armor, (v) => v <= 25, armorTextColor),
+  totalstrength: numberImpl(totalStrength, (_v, c) => c.preview.health <= 25),
+  mapvote: MAPVOTE,
   iarmor: picImpl((_p, c) => `sb_armor${c.preview.armorType}`, 24, 24, (_p, c) => 'gyr'[c.preview.armorType - 1]),
   healthdamage: numberImpl(() => 12),
   armordamage: numberImpl(() => 24),

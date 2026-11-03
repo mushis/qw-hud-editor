@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { ELEMENT_BY_NAME, ELEMENTS } from '../hud/catalog'
-import { DEFAULTS_SOURCE, defaultValue, EZQUAKE_DEFAULTS } from '../hud/defaults'
+import { DEFAULTS_SOURCE, defaultValue, EZQUAKE_DEFAULTS, isUnezquakeElement, isUnezquakeParam } from '../hud/defaults'
 import { isColorParam, isPaletteColor } from '../hud/colors'
 import { invalidReason, minValue, TEXT_PARAMS } from '../hud/issues'
 import { ALIGN_X, ALIGN_Y, SCREEN_AREAS, wouldCycle } from '../hud/layout'
 import { useStore } from '../store'
 import { CopyFrom } from './CopyFrom'
+import { GroupPanel } from './GroupPanel'
 import { Checkbox, ColorField, Combobox, NumberField, Select, SliderField, TextField, type ComboOption } from './fields'
 import { useHudLayout } from './useHudLayout'
 
@@ -165,7 +166,14 @@ export function Inspector() {
     const invalid = invalidReason(doc, selected, p)
     return (
       <tr key={p} className={[changed && 'changed', invalid && 'invalid'].filter(Boolean).join(' ') || undefined}>
-        <th title={invalid ?? (fallback !== undefined ? `default: "${fallback}"` : 'not an ezQuake default cvar')}>{p}</th>
+        <th title={invalid ?? (fallback !== undefined ? `default: "${fallback}"` : 'not an ezQuake default cvar')}>
+          {p}
+          {!isUnezquakeElement(selected) && isUnezquakeParam(selected, p) && (
+            <em className="tag unez" title="Only in unezquake: ezQuake ignores this setting">
+              unez
+            </em>
+          )}
+        </th>
         <td>
           {editor(p)}
           {invalid && <div className="row-error">{invalid}</div>}
@@ -190,6 +198,9 @@ export function Inspector() {
     <aside className="inspector">
       <h2>{selected}</h2>
       {def && <p className="hint">{def.description}</p>}
+      {isUnezquakeElement(selected) && (
+        <p className="hint unez-note">Only in unezquake: ezQuake doesn't have this element and ignores its settings.</p>
+      )}
       {box ? (
         <p className="hint mono">
           x {box.outer.x} y {box.outer.y} · {box.outer.w}×{box.outer.h}
@@ -213,6 +224,7 @@ export function Inspector() {
         <CopyFrom names={Object.keys(doc.elements).filter((n) => n !== selected)} onPick={copyFrom} />
       </div>
       {message?.message && <p className={`hint${message.bad ? ' warn' : ''}`}>{message.message}</p>}
+      {/^group[1-9]$/.test(selected) && <GroupPanel group={selected} />}
       <table className="params">
         <tbody>
           {COMMON.filter((p) => p in params).map(row)}

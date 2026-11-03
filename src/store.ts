@@ -16,6 +16,8 @@ export interface Settings extends ClientSettings {
   crosshair: Crosshair // the crosshair cvars, from Import setup
   paletteTree: boolean // element list by place (who is placed on whom) instead of by category
   fontFacepath: string // font_facepath from the last cfg that set it: the TTF proportional text uses
+  showGroups: boolean // outline the groups on the stage, with the elements placed on them
+  paletteCollapsed: boolean // element list folded to a thin strip
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -33,6 +35,8 @@ export const DEFAULT_SETTINGS: Settings = {
   crosshair: DEFAULT_CROSSHAIR,
   paletteTree: false,
   fontFacepath: '',
+  showGroups: false,
+  paletteCollapsed: false,
 }
 
 const HISTORY_LIMIT = 200

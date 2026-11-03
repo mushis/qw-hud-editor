@@ -1,16 +1,17 @@
 import { useRef, useState } from 'react'
 import logo from '../assets/brand/logo-64.png'
 import type { ViewMode } from '../hud/catalog'
-import { CUSTOM_BACKGROUND, removeTextureSet, saveCustomBackground, useCustomBackground, useTextures, type TextureKind } from '../render/textures'
+import { CUSTOM_BACKGROUND, saveCustomBackground, useCustomBackground, useTextures } from '../render/textures'
 import { useStore, virtualSize } from '../store'
 import { nextTheme, themeOf } from '../themes'
 import { fetchSharedCfg, galleryEnabled, openedFromSignInLink, useGallery } from '../gallery/api'
 import { MyHuds } from '../gallery/MyHuds'
 import { ShareDialog } from '../gallery/ShareDialog'
 import { About } from './About'
+import { AssetsDialog } from './AssetsDialog'
 import { ProportionalDialog } from './ProportionalDialog'
 import { SetupDialog } from './SetupDialog'
-import { currentCfg, importCfg, loadEmptyHud, loadTextureFiles } from './actions'
+import { currentCfg, importCfg, loadEmptyHud } from './actions'
 import { readCfgFile } from './cfgFile'
 import { downloadText, fetchPreset, PRESETS } from './io'
 
@@ -28,7 +29,6 @@ const RESOLUTIONS: [number, number][] = [
   [3440, 1440],
 ]
 const VIEWSIZES = [85, 90, 95, 99, 100, 110, 120]
-const KIND_LABELS: Record<TextureKind, string> = { wad: 'HUD pictures', charset: 'Charset', crosshair: 'Crosshair' }
 
 // In-game screenshots to place the HUD on.
 const BACKGROUNDS: [string, string][] = [
@@ -67,8 +67,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const customBackground = useCustomBackground((s) => s.url)
   const cfgInput = useRef<HTMLInputElement>(null)
   const bgInput = useRef<HTMLInputElement>(null)
-  const texInput = useRef<HTMLInputElement>(null)
-  const [dialog, setDialog] = useState<null | 'about' | 'admin' | 'share' | 'mine' | 'setup' | 'proportional'>(openedFromSignInLink ? 'admin' : null)
+  const [dialog, setDialog] = useState<null | 'about' | 'admin' | 'share' | 'mine' | 'setup' | 'proportional' | 'assets'>(openedFromSignInLink ? 'admin' : null)
   const [lastName, setLastName] = useState('')
   const close = () => setDialog(null)
 
@@ -110,12 +109,6 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
       <div className="group">
         <button onClick={() => cfgInput.current?.click()} title="Open a HUD or config file (you can also drop it on the page)">
           Import cfg
-        </button>
-        <button
-          onClick={() => setDialog('setup')}
-          title="Choose your Quake folder: imports ezquake/configs/config.cfg with its charset, crosshair and HUD pictures"
-        >
-          Import setup
         </button>
         <input
           ref={cfgInput}
@@ -252,8 +245,14 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
         </label>
       </div>
 
-      <fieldset className="group client" title="How the HUD looks in the editor: background, text font and textures">
+      <fieldset className="group client" title="How the HUD looks in the editor: your Quake setup, background, text font and textures">
         <legend>HUD editor appearance</legend>
+        <button
+          onClick={() => setDialog('setup')}
+          title="Choose your Quake folder (or a folder of HUD pictures): imports ezquake/configs/config.cfg with its charset, crosshair and HUD pictures"
+        >
+          Import setup
+        </button>
         <select
           value={settings.background}
           onChange={(e) => (e.target.value === 'upload' ? bgInput.current?.click() : setSettings({ background: e.target.value }))}
@@ -283,41 +282,11 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
           Proportional…
         </button>
         <button
-          onClick={() => texInput.current?.click()}
-          title="Load custom HUD textures: images (num_0.png, sb_shells.tga…), gfx.wad, or a zip/pk3. You can also drop them on the page."
+          onClick={() => setDialog('assets')}
+          title={textureSets.length ? 'See the loaded textures, charset and crosshair, add more or delete them' : 'Load your own HUD pictures, charset or wad'}
         >
-          Textures…
+          {textureSets.length ? `Assets (${textureSets.reduce((n, set) => n + set.names.length, 0)})…` : 'Assets…'}
         </button>
-        <input
-          ref={texInput}
-          type="file"
-          multiple
-          accept=".png,.tga,.jpg,.jpeg,.webp,.wad,.zip,.pk3"
-          hidden
-          onChange={(e) => {
-            const files = [...(e.target.files ?? [])]
-            e.target.value = ''
-            if (files.length) loadTextureFiles(files.map((file) => ({ path: file.name, file }))).then(onMessage)
-          }}
-        />
-        {textureSets.map((set) => {
-          const what = set.kind ? KIND_LABELS[set.kind] : 'textures'
-          return (
-            <button
-              key={set.id}
-              className="texture-set"
-              title={`${set.kind ? `${what}: ${set.label}` : `Textures from ${set.label}: ${set.names.join(', ')}`}.
-Click to remove it (what it replaced shows again).`}
-              onClick={() => {
-                if (!window.confirm(`Remove the custom ${what.toLowerCase()} "${set.label}"?`)) return
-                removeTextureSet(set.id)
-                onMessage(`Removed the custom ${what.toLowerCase()} "${set.label}".`)
-              }}
-            >
-              {set.kind === 'wad' ? `${set.names.length} HUD pictures` : set.kind ? what : `${set.names.length} custom`} · <span>{set.label}</span> ✕
-            </button>
-          )
-        })}
       </fieldset>
 
       <div className="group end">
@@ -344,6 +313,7 @@ Click to remove it (what it replaced shows again).`}
       {dialog === 'mine' && <MyHuds onClose={close} onMessage={onMessage} />}
       {dialog === 'setup' && <SetupDialog onClose={close} onMessage={onMessage} />}
       {dialog === 'proportional' && <ProportionalDialog onClose={close} onMessage={onMessage} />}
+      {dialog === 'assets' && <AssetsDialog onClose={close} onMessage={onMessage} />}
     </header>
   )
 }

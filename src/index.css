@@ -1408,3 +1408,396 @@ input.switch:focus-visible {
 .setup-actions {
   gap: 8px;
 }
+
+/* ---------------------------------------------------------------- unezquake-only elements and settings */
+
+.tag.unez {
+  font-size: 10px;
+  font-style: normal;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 3px;
+  color: #6fb3e0;
+  border: 1px solid color-mix(in srgb, #6fb3e0 50%, transparent);
+}
+
+.palette-item .tag.unez {
+  margin-left: auto;
+}
+
+.palette-item .tag.unez + .tag {
+  margin-left: 4px;
+}
+
+.unez-note {
+  color: #6fb3e0;
+}
+
+/* ---------------------------------------------------------------- stage right-click menu */
+
+.stage-menu {
+  position: fixed;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.stage-menu-title {
+  padding: 2px 8px 4px;
+  font-size: 11px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+.stage-menu button {
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 5px 8px;
+}
+
+.stage-menu button:hover,
+.stage-menu button:focus-visible {
+  background: var(--accent-bg);
+}
+
+.stage-menu hr {
+  width: 100%;
+  margin: 3px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------------------------------------------------------------- groups on the stage */
+
+.zoom.stage-groups {
+  right: auto;
+  left: 12px;
+}
+
+.group-outline {
+  position: absolute;
+  pointer-events: none;
+  outline: 1.5px dashed var(--group);
+  outline-offset: 1px;
+}
+
+.group-outline span {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  margin-bottom: 3px;
+  padding: 0 5px;
+  font-size: 10px;
+  white-space: nowrap;
+  color: #111;
+  background: var(--group);
+  border-radius: 3px;
+  opacity: 0.9;
+}
+
+.group-member {
+  position: absolute;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--group) 30%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--group) 70%, transparent);
+}
+
+/* ---------------------------------------------------------------- group panel (right) */
+
+.group-panel {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.group-panel h3 {
+  margin: 4px 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+}
+
+.group-panel ul {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.group-panel li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.group-panel li.off .link {
+  color: var(--dim);
+  font-style: italic;
+}
+
+.group-panel li button {
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.group-panel button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+
+.group-picture {
+  display: flex;
+  gap: 10px;
+}
+
+.group-picture-box {
+  flex: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 72px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+  background: repeating-conic-gradient(#0000 0 25%, #8882 0 50%) 0 0 / 12px 12px;
+}
+
+.group-picture-box img {
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+
+.group-picture dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 8px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.group-picture dt {
+  color: var(--dim);
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.group-picture dd {
+  margin: 0;
+}
+
+.group-picture-box:hover {
+  border-color: var(--accent);
+}
+
+.picture-picker {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+
+.picture-picker > input {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.picture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.picture-grid button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  font-size: 10px;
+  overflow: hidden;
+}
+
+.picture-grid button > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-grid button.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.picture-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 36px;
+  background: repeating-conic-gradient(#0000 0 25%, #8882 0 50%) 0 0 / 8px 8px;
+}
+
+.picture-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+
+.picture-thumb.none {
+  color: var(--dim);
+}
+
+/* ---------------------------------------------------------------- loaded assets dialog */
+
+.asset-set {
+  margin: 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.asset-set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.asset-set-head button {
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.asset {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.asset.replaced {
+  opacity: 0.45;
+}
+
+.asset-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-delete {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  visibility: hidden;
+}
+
+.asset:hover .asset-delete,
+.asset-delete:focus-visible {
+  visibility: visible;
+}
+
+.asset-delete:hover {
+  color: var(--warn);
+}
+
+/* ---------------------------------------------------------------- collapsible element list */
+
+.app.palette-collapsed {
+  grid-template-columns: 28px 1fr 300px;
+}
+
+.palette .search button.palette-collapse {
+  margin-left: 6px;
+  width: 24px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.palette.collapsed {
+  padding: 0;
+  overflow: hidden;
+}
+
+.palette-expand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 8px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--dim);
+}
+
+.palette-expand:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.palette-expand-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.charset-grid {
+  margin-top: 8px;
+}
+
+.charset-grid .picture-thumb {
+  width: 64px;
+  height: 64px;
+  background: #000;
+}

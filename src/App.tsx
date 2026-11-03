@@ -102,6 +102,7 @@ export default function App() {
   useKeyboard()
   const dragging = useFileDrop(setMessage)
   const theme = useStore((s) => s.settings.theme)
+  const paletteCollapsed = useStore((s) => s.settings.paletteCollapsed)
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
@@ -129,7 +130,7 @@ export default function App() {
   }, [message])
 
   return (
-    <div className="app">
+    <div className={`app${paletteCollapsed ? ' palette-collapsed' : ''}`}>
       <Toolbar onMessage={setMessage} />
       <Palette />
       <main>
