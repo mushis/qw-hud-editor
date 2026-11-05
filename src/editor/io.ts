@@ -17,7 +17,11 @@ export async function readFileText(file: File): Promise<string> {
 }
 
 export function downloadText(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([textToBytes(text)], { type: 'text/plain' }))
+  downloadBlob(name, new Blob([textToBytes(text)], { type: 'text/plain' }))
+}
+
+export function downloadBlob(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = name

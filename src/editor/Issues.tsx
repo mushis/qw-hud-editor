@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { DEFAULTS_SOURCE, defaultValue } from '../hud/defaults'
-import { findIssues, type Issue, type Severity } from '../hud/issues'
+import { clientIssues, findIssues, type Issue, type Severity } from '../hud/issues'
 import { useStore } from '../store'
 import { useHudLayout } from './useHudLayout'
 
@@ -21,6 +21,11 @@ export function Issues() {
   }
   const [open, setOpen] = useState(true)
   const issues = useMemo(() => findIssues(doc, placed, screen), [doc, placed, screen])
+  // The resolution and virtual size, which aren't part of any element, come first.
+  const settings = useStore((s) => s.settings)
+  const client = useMemo(() => clientIssues(settings, settings.cfgResolution), [settings])
+  const setSettings = useStore((s) => s.setSettings)
+  const count = client.length + issues.length
   const errors = issues.filter((i) => i.severity === 'error').length
 
   return (
@@ -28,10 +33,26 @@ export function Issues() {
       <button className="issues-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="chevron">{open ? '▾' : '▸'}</span>
         Issues
-        <span className={`count${errors ? ' bad' : issues.length ? ' some' : ''}`}>{issues.length}</span>
+        <span className={`count${errors ? ' bad' : count ? ' some' : ''}`}>{count}</span>
       </button>
       {open && (
         <ul>
+          {client.map((issue) => (
+            <li key={issue.cvar + issue.message} className={issue.severity}>
+              <span className="sev" title={issue.severity}>
+                {ICONS[issue.severity]}
+              </span>
+              <span className="mono">{issue.cvar}</span>
+              <span className="message">{issue.message}</span>
+              {issue.fix ? (
+                <button className="issue-reset" onClick={() => setSettings(issue.fix!.settings)} title={issue.fix.title}>
+                  {issue.fix.label}
+                </button>
+              ) : (
+                <span className="issue-reset-none" />
+              )}
+            </li>
+          ))}
           {issues.map((issue, i) => (
             <li
               key={i}
@@ -62,7 +83,7 @@ export function Issues() {
               )}
             </li>
           ))}
-          {!issues.length && <li className="none">No issues: every enabled element is drawn on screen.</li>}
+          {!count && <li className="none">No issues: every enabled element is drawn on screen.</li>}
         </ul>
       )}
     </section>

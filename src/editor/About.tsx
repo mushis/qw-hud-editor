@@ -85,9 +85,19 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
         </li>
         <li>
           <b>Issues</b>, under the screen, lists enabled elements that won't look as intended: off-screen or cut off, hidden because they
-          are placed on a hidden element, or using an invalid value. Off-screen elements also get a red marker on the screen edge.
+          are placed on a hidden element, or using an invalid value, and a resolution the cfg set that the editor can't use (like 0×0). Off-screen
+          elements also get a red marker on the screen edge.
         </li>
-        <li>Fit / 2× / 4× zooms the screen. Ctrl+Z and Ctrl+Y undo and redo.</li>
+        <li>
+          On the screen, hold <b>Ctrl</b> to drag the selected element's corners: that changes its scale (or width and height for groups and
+          bars). Hold <b>Alt</b> while dragging an element placed on another one to move both, or one that others are placed on to move only
+          it. Right-click for moves to an edge, unanchoring and reset. The bar under the screen shows what the mouse and keys do right now.
+        </li>
+        <li>Fit / 2× / 4× zooms the screen; the zoom and the scroll position are kept when you reload. Ctrl+Z and Ctrl+Y undo and redo.</li>
+        <li>
+          <b>Export setup</b> saves a zip with the HUD as a named cfg and the pictures loaded into the editor (HUD pictures, charset, crosshair,
+          group pictures), laid out like the <code>qw</code> folder to extract it into.
+        </li>
       </ul>
 
       <h3>Settings</h3>

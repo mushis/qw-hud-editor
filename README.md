@@ -17,6 +17,7 @@ npm run gen-defaults  # regenerate src/hud/ezquake-defaults.json from ezQuake so
 Game graphics, the charset and the sample HUD configs come from
 [nQuake distfiles](https://github.com/nQuake/distfiles). The layout logic is a
 port of [ezQuake](https://github.com/QW-Group/ezquake-source)'s HUD code. The map
-backgrounds are from [quake-mapshots](https://github.com/vikpe/quake-mapshots) (MIT).
+backgrounds are from [quake-mapshots](https://github.com/vikpe/quake-mapshots) (MIT). The
+hub.quakeworld.nu preset is the [qw-streambot-ezquake](https://github.com/vikpe/qw-streambot-ezquake/blob/main/ezquake/configs/streambot.cfg) config.
 
 License: GPL-2.0-or-later.

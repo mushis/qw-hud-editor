@@ -315,6 +315,7 @@ main {
   position: relative;
   flex: 1;
   display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
@@ -1477,11 +1478,6 @@ input.switch:focus-visible {
 
 /* ---------------------------------------------------------------- groups on the stage */
 
-.zoom.stage-groups {
-  right: auto;
-  left: 12px;
-}
-
 .group-outline {
   position: absolute;
   pointer-events: none;
@@ -1800,4 +1796,101 @@ input.switch:focus-visible {
   width: 64px;
   height: 64px;
   background: #000;
+}
+
+/* Ctrl: squares on the selected element's corners, dragged to resize it. */
+.resize-handle {
+  position: absolute;
+  z-index: 3;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  background: var(--accent);
+  border: 1px solid var(--accent-ink);
+  pointer-events: auto;
+}
+
+.resize-handle.tl,
+.resize-handle.br {
+  cursor: nwse-resize;
+}
+
+.resize-handle.tr,
+.resize-handle.bl {
+  cursor: nesw-resize;
+}
+
+/* Under the stage: Groups, what the mouse and keys do, zoom. A fixed height, so changing hints don't resize the stage. */
+.stage-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px;
+  flex: none;
+}
+
+.stage-foot .zoom {
+  position: static;
+  flex: none;
+}
+
+.stage-hints {
+  flex: 1;
+  min-width: 0;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 2px 14px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--dim);
+}
+
+.stage-hints.idle {
+  opacity: 0.6;
+}
+
+.stage-hints kbd {
+  padding: 0 4px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+/* Export setup */
+.modal ul.export-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.export-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.export-name input {
+  width: 200px;
+}
+
+.export-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.export-note {
+  margin: 12px 0;
+  padding: 4px 12px;
+  background: var(--note-bg);
+  border: 1px solid var(--note-border);
+  border-radius: 4px;
 }

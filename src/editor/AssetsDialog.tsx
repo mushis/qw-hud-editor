@@ -47,20 +47,24 @@ export function AssetsDialog({ onClose, onMessage }: { onClose: () => void; onMe
         </p>
       ) : (
         <>
-          <p>Load your own graphics; they replace the editor's pictures by name and can be used as group pictures:</p>
+          <p>Load your own graphics; only what the HUD draws is kept:</p>
           <ul>
             <li>
               <strong>HUD pictures</strong>: images named like ezQuake's (<code>num_0</code>, <code>anum_5</code>, <code>sb_shells</code>, <code>face1</code>…),
-              from <code>textures/wad</code> or <code>gfx</code>, or a whole <strong>gfx.wad</strong>
+              from <code>textures/wad</code> or <code>gfx</code>, or a whole <strong>gfx.wad</strong>. They replace the editor's by name.
             </li>
             <li>
-              <strong>Charset</strong>: an image from <code>textures/charsets</code>, or <code>conchars</code>
+              <strong>Charset</strong>: one image from <code>textures/charsets</code>, or a file with <i>char</i> in its name
             </li>
             <li>
-              <strong>Pictures</strong> for <code>hud_groupN_picture</code>: any image, used by its file name
+              <strong>Crosshair</strong>: one image from <code>crosshairs</code>, or a file with <i>cross</i> in its name
             </li>
             <li>
-              <strong>zip / pk3</strong> archives and <strong>folders</strong>: the HUD graphics inside them
+              <strong>Pictures</strong> for <code>hud_groupN_picture</code>: any other image dropped on its own, used by its file name
+            </li>
+            <li>
+              <strong>zip / pk3</strong> archives and <strong>folders</strong>: the HUD pictures, charset and crosshair inside them, and the
+              pictures your groups use. Menu graphics (<code>conback</code>, <code>mainmenu</code>, <code>box_*</code>…) are left out.
             </li>
           </ul>
           <p className="dim">

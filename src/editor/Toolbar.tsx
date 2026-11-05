@@ -9,6 +9,7 @@ import { MyHuds } from '../gallery/MyHuds'
 import { ShareDialog } from '../gallery/ShareDialog'
 import { About } from './About'
 import { AssetsDialog } from './AssetsDialog'
+import { ExportSetupDialog } from './ExportSetupDialog'
 import { ProportionalDialog } from './ProportionalDialog'
 import { SetupDialog } from './SetupDialog'
 import { currentCfg, importCfg, loadEmptyHud } from './actions'
@@ -69,7 +70,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
   const customBackground = useCustomBackground((s) => s.url)
   const cfgInput = useRef<HTMLInputElement>(null)
   const bgInput = useRef<HTMLInputElement>(null)
-  const [dialog, setDialog] = useState<null | 'about' | 'admin' | 'share' | 'mine' | 'setup' | 'proportional' | 'assets'>(openedFromSignInLink ? 'admin' : null)
+  const [dialog, setDialog] = useState<null | 'about' | 'admin' | 'share' | 'mine' | 'setup' | 'export-setup' | 'proportional' | 'assets'>(openedFromSignInLink ? 'admin' : null)
   const [lastName, setLastName] = useState('')
   const close = () => setDialog(null)
 
@@ -170,7 +171,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
           title="Game resolution (vid_width × vid_height)"
           onChange={(e) => {
             const [width, height] = e.target.value.split('x').map(Number)
-            setSettings({ width, height })
+            setSettings({ width, height, cfgResolution: null })
           }}
         >
           {resolutions.map(([w, h]) => (
@@ -255,6 +256,12 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
         >
           Import setup
         </button>
+        <button
+          onClick={() => setDialog('export-setup')}
+          title="Save a zip with this HUD as a cfg and the pictures shown now (HUD pictures, charset, crosshair, group pictures), to extract into your qw folder"
+        >
+          Export setup
+        </button>
         <select
           value={settings.background}
           onChange={(e) => (e.target.value === 'upload' ? bgInput.current?.click() : setSettings({ background: e.target.value }))}
@@ -321,6 +328,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
       {dialog === 'share' && <ShareDialog initialName={lastName} onClose={close} onMessage={onMessage} />}
       {dialog === 'mine' && <MyHuds onClose={close} onMessage={onMessage} />}
       {dialog === 'setup' && <SetupDialog onClose={close} onMessage={onMessage} />}
+      {dialog === 'export-setup' && <ExportSetupDialog onClose={close} onMessage={onMessage} />}
       {dialog === 'proportional' && <ProportionalDialog onClose={close} onMessage={onMessage} />}
       {dialog === 'assets' && <AssetsDialog onClose={close} onMessage={onMessage} />}
     </header>

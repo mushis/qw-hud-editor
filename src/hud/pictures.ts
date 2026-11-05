@@ -1,5 +1,6 @@
 // Pictures for hud_group<N>_picture. ezQuake loads gfx/<name>; the editor has these, plus any the user dropped.
 // Sizes are needed synchronously: pic_scalemode 3 grows the group to the picture size.
+import type { HudDoc } from './cfg'
 import clock from '../assets/gfx/clock.png'
 import scoregra from '../assets/gfx/scoregra.png'
 
@@ -21,6 +22,10 @@ export const pictureName = (value: string | undefined) =>
     .toLowerCase()
     .replace(/^gfx\//, '')
     .replace(/\.(png|tga|jpg|pcx|lmp)$/, '')
+
+// The pictures the HUD's groups show, by name.
+export const groupPictures = (doc: HudDoc) =>
+  new Set(Object.entries(doc.elements).flatMap(([name, p]) => (/^group[0-9]$/.test(name) && pictureName(p.picture) ? [pictureName(p.picture)] : [])))
 
 let custom: Record<string, Picture> = {}
 export function setCustomPictures(pictures: Record<string, Picture>) {

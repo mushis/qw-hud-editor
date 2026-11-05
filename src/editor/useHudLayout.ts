@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { ELEMENT_BY_NAME, ELEMENTS, isActiveIn } from '../hud/catalog'
 import { implFor, type Ctx } from '../hud/elements'
-import { drawOrder, layoutHud, screenFor } from '../hud/layout'
+import { drawOrder, layoutHud, screenFor, type Sizer } from '../hud/layout'
 import { useTextures } from '../render/textures'
 import { useStore, virtualSize } from '../store'
 
@@ -17,13 +17,14 @@ export function useHudLayout() {
     const { width, height } = virtualSize(settings)
     const screen = screenFor(width, height, settings.viewsize)
     const ctx: Ctx = { preview, screenW: screen.width, screenH: screen.height }
-    const placed = layoutHud(doc, screen, (name, p) => implFor(name).size(p, ctx))
+    const sizer: Sizer = (name, p) => implFor(name).size(p, ctx)
+    const placed = layoutHud(doc, screen, sizer)
     const ordered = drawOrder(placed, REGISTRATION)
     const isActive = (name: string) => {
       const def = ELEMENT_BY_NAME.get(name)
       return def ? isActiveIn(def, preview.mode) : true
     }
-    return { doc, screen, ctx, placed, ordered, isActive }
+    return { doc, screen, ctx, sizer, placed, ordered, isActive }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc, preview, settings, textures])
 }

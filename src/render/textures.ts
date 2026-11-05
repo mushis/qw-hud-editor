@@ -3,7 +3,8 @@
 // replace the charset. Each import is a set that can be removed on its own; later sets win for
 // names they share. Kept in IndexedDB so they survive reloads.
 import { create } from 'zustand'
-import { setCustomPictures, type Picture } from '../hud/pictures'
+import { groupPictures, setCustomPictures, type Picture } from '../hud/pictures'
+import { useStore } from '../store'
 import { decodePcx, decodeTga, decodeWad, toPng, unzip } from './decode'
 import { setHudFont } from './renderer'
 
@@ -102,6 +103,18 @@ export async function loadSavedTextures() {
     const all = (await tx<Row[]>('textures', 'readonly', (s) => s.getAll() as IDBRequest<Row[]>)) ?? []
     all.forEach(remember)
     if (sets.length) rebuild(sets)
+    // Older versions took more from folders and archives than the HUD draws (menu graphics, flags, skins): what
+    // loading them now wouldn't take goes. Files dropped on their own only lose Quake's menu graphics.
+    const pictures = groupPictures(useStore.getState().doc)
+    const keep = (set: TextureSet, name: string) => {
+      if (set.kind === 'wad') return isHudPicture(name)
+      if (set.kind || name === CHARSET || name === CROSSHAIR) return true
+      if (IMAGE.test(set.label.split(' ')[0])) return !MENU_PIC.test(name)
+      return isHudPicture(name) || pictures.has(name)
+    }
+    for (const set of sets) {
+      for (const name of set.names) if (!keep(set, name)) await removeTexture(set.id, name)
+    }
   } catch {
     // no IndexedDB (private window): textures just aren't remembered
   }
@@ -131,7 +144,7 @@ export async function removeTextureSet(id: string) {
 // Removes one texture from a set (the whole set when it was the last one).
 export async function removeTexture(setId: string, name: string) {
   const set = useTextures.getState().sets.find((s) => s.id === setId)
-  if (!set) return
+  if (!set || !set.names.includes(name)) return
   if (set.names.length <= 1) return removeTextureSet(setId)
   const key = `${setId}/${name}`
   const r = records.get(key)
@@ -228,11 +241,14 @@ export async function removeHudFont() {
 // ---------------------------------------------------------------- importing
 
 const IMAGE = /\.(png|tga|jpe?g|webp|gif|bmp|pcx)$/i
-// Status bar pictures, as named in gfx.wad and textures/wad/.
-const HUD_PIC = /^(a?num_|face|inv|sb_|ibar|sbar|disc|net$|ram$|turtle$|backtile$)/
+// The status bar pictures the HUD draws (the editor's own are in public/assets/wad), as named in gfx.wad and
+// textures/wad/. Menu and intermission graphics (conback, mainmenu, pause, ranking, box_*…) aren't HUD pictures.
+const HUD_PIC =
+  /^(a?num_([0-9]|colon|minus|slash)|face([1-5]|_inv2|_invis|_invul2|_p[1-5]|_quad)|inv2?_(lightng|nailgun|rlaunch|shotgun|snailgun|srlaunch|sshotgun)|sb_(armor[1-3]|cells|invis|invuln|key[12]|nails|quad|rocket|shells|sigil[1-4]|suit)|backtile|disc|ibar|net)$/
 export const isHudPicture = (name: string) => HUD_PIC.test(name)
-// Inside archives, other images only count in folders that look like HUD graphics.
-const HUD_FOLDER = /(^|\/)[^/]*(wad|gfx|hud|score|char)[^/]*\//i
+// Quake's menu, console and intermission graphics (gfx/), which the HUD never draws.
+const MENU_PIC =
+  /^(bigbox|box\w*|charset|complete|conback|conchars|cursor\d*|dim_\w+|finale|flags|help\d|inter|loading|mainmenu|menudot\d*|menuplyr|mp_menu\w*|p_\w+|pause|qplaque|ranking|sp_menu|ttl\w*|vidmodes)$/
 
 const baseName = (path: string) =>
   path
@@ -241,8 +257,7 @@ const baseName = (path: string) =>
     .replace(/\.[^.]+$/, '')
     .toLowerCase()
 
-const isCharset = (path: string, name: string, w: number, h: number) =>
-  name === 'conchars' || /(^|\/)charsets?\//i.test(path) || (name.includes('char') && w === h)
+const inFolder = (path: string, folder: string) => new RegExp(`(^|/)${folder}/[^/]+$`, 'i').test(path)
 
 async function fromImage(path: string, data: Uint8Array): Promise<Stored | null> {
   let blob: Blob
@@ -260,8 +275,7 @@ async function fromImage(path: string, data: Uint8Array): Promise<Stored | null>
     h = bitmap.height
     bitmap.close()
   }
-  const name = baseName(path)
-  return { name: isCharset(path, name, w, h) ? CHARSET : name, blob, w, h }
+  return { name: baseName(path), blob, w, h }
 }
 
 // An image file decoded for a preview (TGA and PCX too): an object URL the caller revokes, and its size.
@@ -274,14 +288,18 @@ export async function previewImage(path: string, file: File): Promise<{ url: str
   }
 }
 
+// Only the HUD pictures of a wad: its conchars isn't the charset ezQuake uses (that one is in textures/charsets).
 async function fromWad(data: Uint8Array): Promise<Stored[]> {
   return Promise.all(
-    decodeWad(data).map(async ({ name, image }) => ({ name: name === 'conchars' ? CHARSET : name, blob: await toPng(image), w: image.w, h: image.h })),
+    decodeWad(data)
+      .filter(({ name }) => isHudPicture(name))
+      .map(async ({ name, image }) => ({ name, blob: await toPng(image), w: image.w, h: image.h })),
   )
 }
 
 interface Found extends Stored {
   rank: number // lower wins when several files give the same name
+  path: string
 }
 
 // ezQuake looks for textures/wad/<name> before gfx/<name>, and in each tries .tga, .png, .jpg;
@@ -295,10 +313,26 @@ export function texturePriority(path: string): number {
 interface Collected {
   found: Found[]
   skipped: string[] // files that could not be read
+  pictures: Set<string> // group pictures the HUD uses
 }
 
-// From a folder or an archive, images only count when they look like HUD graphics
-// (a whole qw folder also holds skins and map textures). Luma/glow maps are ignored.
+// What an image is for, or null when the HUD doesn't use it. In a folder or an archive (a whole qw folder also
+// holds menu graphics, skins and map textures) only these count: the HUD pictures, a charset in a charsets folder,
+// a crosshair in a crosshairs folder and the pictures the HUD's groups show. A file dropped on its own is the
+// charset or crosshair when its name says so (char, cross), else a picture to use in a group; Quake's menu
+// graphics never are. Luma/glow maps are ignored.
+export function texturePurpose(path: string, nested: boolean, pictures: Set<string> = new Set()): string | null {
+  if (!IMAGE.test(path) || /_(luma|glow)\.[^.]+$/i.test(path)) return null
+  const name = baseName(path)
+  if (inFolder(path, 'charsets?')) return CHARSET
+  if (inFolder(path, 'crosshairs?')) return CROSSHAIR
+  if (isHudPicture(name) || pictures.has(name)) return name
+  if (nested || MENU_PIC.test(name)) return null
+  if (name.includes('char')) return CHARSET
+  if (name.includes('cross')) return CROSSHAIR
+  return name
+}
+
 async function collect(path: string, data: Uint8Array, nested: boolean, out: Collected): Promise<void> {
   try {
     if (/\.(zip|pk3)$/i.test(path)) {
@@ -306,14 +340,13 @@ async function collect(path: string, data: Uint8Array, nested: boolean, out: Col
       return
     }
     if (/\.wad$/i.test(path)) {
-      out.found.push(...(await fromWad(data)).map((t) => ({ ...t, rank: 99 })))
+      out.found.push(...(await fromWad(data)).map((t) => ({ ...t, rank: 99, path })))
       return
     }
-    if (!IMAGE.test(path) || /_(luma|glow)\.[^.]+$/i.test(path)) return
-    const name = baseName(path)
-    if (nested && !HUD_PIC.test(name) && !HUD_FOLDER.test(path) && name !== 'conchars') return
+    const name = texturePurpose(path, nested, out.pictures)
+    if (!name) return
     const tex = await fromImage(path, data)
-    if (tex) out.found.push({ ...tex, rank: texturePriority(path) })
+    if (tex) out.found.push({ ...tex, name, rank: texturePriority(path), path })
   } catch {
     out.skipped.push(path.split('/').pop()!)
   }
@@ -327,15 +360,37 @@ export interface PathFile {
   file: File
 }
 
-// Adds the textures in these files as a new set. When several files give the same name, the one ezQuake would use wins.
-export async function importTextures(files: PathFile[], label: string): Promise<{ names: string[]; skipped: string[] }> {
-  const out: Collected = { found: [], skipped: [] }
+// Adds the textures in these files as a new set. When several files give the same name, the one ezQuake would use
+// wins. Of several charsets or crosshairs the one the config names (`named`: loadcharset, crosshairimage) is
+// taken, else none (`several` says so), as there is only one of each. `pictures` are the group pictures the HUD
+// uses, which are also taken from folders.
+export async function importTextures(
+  files: PathFile[],
+  label: string,
+  pictures: Set<string> = new Set(),
+  named: { charset?: string; crosshair?: string } = {},
+): Promise<{ names: string[]; skipped: string[]; several: string[] }> {
+  const out: Collected = { found: [], skipped: [], pictures }
   for (const { path, file } of files) await collect(path, new Uint8Array(await file.arrayBuffer()), path.includes('/'), out)
+  const several: string[] = []
+  for (const [kind, what, wanted] of [
+    [CHARSET, 'charsets', named.charset],
+    [CROSSHAIR, 'crosshairs', named.crosshair],
+  ]) {
+    const count = new Set(out.found.filter((t) => t.name === kind).map((t) => baseName(t.path))).size
+    if (count < 2) continue
+    // The cfg's value may carry a folder or an extension ("crosshairs/dot.png"): the file name counts.
+    const want = wanted ? baseName(wanted.replace(/\\/g, '/')) : ''
+    const match = want ? out.found.filter((t) => t.name === kind && baseName(t.path) === want) : []
+    out.found = out.found.filter((t) => t.name !== kind || match.includes(t))
+    if (!match.length) several.push(`${count} ${what}`)
+  }
   const best = new Map<string, Found>()
   for (const t of out.found) if (!best.has(t.name) || t.rank < best.get(t.name)!.rank) best.set(t.name, t)
   const list: Stored[] = [...best.values()].map(({ name, blob, w, h }) => ({ name, blob, w, h }))
   if (list.length) await addSet(label, list)
-  return { names: list.map((t) => (t.name === CHARSET ? 'charset' : t.name)).sort(), skipped: out.skipped }
+  const shown = (n: string) => (n === CHARSET ? 'charset' : n === CROSSHAIR ? 'crosshair' : n)
+  return { names: list.map((t) => shown(t.name)).sort(), skipped: out.skipped, several }
 }
 
 // Files from a drop, descending into dropped folders.

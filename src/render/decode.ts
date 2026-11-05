@@ -141,6 +141,72 @@ export async function unzip(buf: Uint8Array): Promise<{ path: string; data: Uint
   return out
 }
 
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+  return c >>> 0
+})
+
+function crc32(data: Uint8Array): number {
+  let c = 0xffffffff
+  for (let i = 0; i < data.length; i++) c = CRC_TABLE[(c ^ data[i]) & 0xff] ^ (c >>> 8)
+  return (c ^ 0xffffffff) >>> 0
+}
+
+// A zip of these files, stored without compression (the pictures are PNG or JPEG already).
+export function zip(files: { path: string; data: Uint8Array }[]): Blob {
+  const parts: Uint8Array[] = []
+  const central: Uint8Array[] = []
+  let offset = 0
+  // MS-DOS date and time of now, which zip stores per file.
+  const now = new Date()
+  const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)
+  const date = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()
+  const header = (size: number) => {
+    const b = new Uint8Array(size)
+    return { b, v: new DataView(b.buffer) }
+  }
+  for (const { path, data } of files) {
+    const name = new TextEncoder().encode(path)
+    const crc = crc32(data)
+    const local = header(30 + name.length)
+    local.v.setUint32(0, 0x04034b50, true)
+    local.v.setUint16(4, 20, true) // version needed
+    local.v.setUint16(6, 0x0800, true) // UTF-8 names
+    local.v.setUint16(10, time, true)
+    local.v.setUint16(12, date, true)
+    local.v.setUint32(14, crc, true)
+    local.v.setUint32(18, data.length, true)
+    local.v.setUint32(22, data.length, true)
+    local.v.setUint16(26, name.length, true)
+    local.b.set(name, 30)
+    const entry = header(46 + name.length)
+    entry.v.setUint32(0, 0x02014b50, true)
+    entry.v.setUint16(4, 20, true)
+    entry.v.setUint16(6, 20, true)
+    entry.v.setUint16(8, 0x0800, true)
+    entry.v.setUint16(12, time, true)
+    entry.v.setUint16(14, date, true)
+    entry.v.setUint32(16, crc, true)
+    entry.v.setUint32(20, data.length, true)
+    entry.v.setUint32(24, data.length, true)
+    entry.v.setUint16(28, name.length, true)
+    entry.v.setUint32(42, offset, true)
+    entry.b.set(name, 46)
+    parts.push(local.b, data)
+    central.push(entry.b)
+    offset += local.b.length + data.length
+  }
+  const size = central.reduce((n, c) => n + c.length, 0)
+  const end = header(22)
+  end.v.setUint32(0, 0x06054b50, true)
+  end.v.setUint16(8, files.length, true)
+  end.v.setUint16(10, files.length, true)
+  end.v.setUint32(12, size, true)
+  end.v.setUint32(16, offset, true)
+  return new Blob([...parts, ...central, end.b] as BlobPart[], { type: 'application/zip' })
+}
+
 export async function toPng({ w, h, data }: Rgba): Promise<Blob> {
   const canvas = new OffscreenCanvas(w, h)
   canvas.getContext('2d')!.putImageData(new ImageData(data as ImageDataArray, w, h), 0, 0)

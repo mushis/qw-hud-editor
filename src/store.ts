@@ -18,6 +18,9 @@ export interface Settings extends ClientSettings {
   fontFacepath: string // font_facepath from the last cfg that set it: the TTF proportional text uses
   showGroups: boolean // outline the groups on the stage, with the elements placed on them
   paletteCollapsed: boolean // element list folded to a thin strip
+  cfgResolution: { width?: number; height?: number } | null // vid_width / vid_height from the last cfg when unusable (e.g. 0), so not applied
+  cfgCharset: string // loadcharset / gl_consolefont of the last cfg ('' when it sets none): picks the charset file to load
+  cfgCrosshair: string // crosshairimage of the last cfg ('' when it sets none): picks the crosshair file to load
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +40,9 @@ export const DEFAULT_SETTINGS: Settings = {
   fontFacepath: '',
   showGroups: false,
   paletteCollapsed: false,
+  cfgResolution: null,
+  cfgCharset: '',
+  cfgCrosshair: '',
 }
 
 const HISTORY_LIMIT = 200
@@ -61,6 +67,10 @@ interface State {
   setParams(element: string, values: Record<string, string>): void
   // Single undoable edit.
   editParams(element: string, values: Record<string, string>): void
+  // Several elements at once, without touching history (use after checkpoint()).
+  setMany(changes: Record<string, Record<string, string>>): void
+  // Several elements as one undoable edit.
+  editMany(changes: Record<string, Record<string, string>>): void
   undo(): void
   redo(): void
   setPreview(p: Partial<Preview>): void
@@ -116,6 +126,16 @@ export const useStore = create<State>((set, get) => ({
   editParams(element, values) {
     get().checkpoint()
     get().setParams(element, values)
+  },
+  setMany(changes) {
+    const { doc } = get()
+    const elements = { ...doc.elements }
+    for (const [element, values] of Object.entries(changes)) elements[element] = { ...elements[element], ...values }
+    set({ doc: { ...doc, elements } })
+  },
+  editMany(changes) {
+    get().checkpoint()
+    get().setMany(changes)
   },
   undo() {
     const { past, future, doc } = get()

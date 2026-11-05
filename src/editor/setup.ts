@@ -4,7 +4,7 @@ import { lastValues } from '../hud/cfg'
 import { crosshairFromCvars } from '../render/crosshair'
 import { importKind, isHudPicture, previewImage, removeKind, texturePriority, type PathFile } from '../render/textures'
 import { useStore } from '../store'
-import { importCfg } from './actions'
+import { cfgPictures, importCfg } from './actions'
 import { readCfgFile } from './cfgFile'
 
 // A folder read lazily: only the subfolders looked into are listed (a Quake folder can hold thousands of files).
@@ -96,16 +96,18 @@ async function fileAt(root: Folder, path: string): Promise<PathFile | null> {
   return e && 'file' in e ? { path: `${parts.slice(0, -1).join('/')}/${e.name}`, file: await e.file() } : null
 }
 
-// ezQuake's own folder is searched before qw, and loads .tga, .png, .jpg, then .pcx; the extension in a cvar is ignored.
-const GAMEDIRS = ['ezquake', 'qw']
+// ezQuake searches qw before its own folder (it is added to the search path last, fs.c), and loads .tga, .png,
+// .jpg, then .pcx; the extension in a cvar is ignored.
+const GAMEDIRS = ['qw', 'ezquake']
 const EXTENSIONS = ['tga', 'png', 'jpg', 'pcx']
 
-async function findImage(root: Folder, folders: string[], name: string): Promise<PathFile | null> {
+// `games`: the game folders to look in, [''] for a folder that is no Quake folder (e.g. a textures folder).
+async function findImage(root: Folder, folders: string[], name: string, games = GAMEDIRS): Promise<PathFile | null> {
   const base = name.replace(/\\/g, '/').replace(/\.[^./]+$/, '')
-  for (const game of GAMEDIRS) {
+  for (const game of games) {
     for (const folder of folders) {
       for (const ext of EXTENSIONS) {
-        const found = await fileAt(root, `${game}/${folder}/${base}.${ext}`)
+        const found = await fileAt(root, [game, folder, `${base}.${ext}`].filter(Boolean).join('/'))
         if (found) return found
       }
     }
@@ -129,7 +131,7 @@ async function hudPictures(folders: { dir: Folder | null; path: string }[]): Pro
   return Promise.all([...best.values()].map(async ({ entry, path }) => ({ path, file: await (entry as { file: () => Promise<File> }).file() })))
 }
 
-// The HUD pictures in textures/wad, ezquake's before qw's.
+// The HUD pictures in textures/wad, qw's before ezquake's.
 const wadPictures = async (root: Folder) =>
   hudPictures(await Promise.all(GAMEDIRS.map(async (game) => ({ dir: await folderAt(root, `${game}/textures/wad`), path: `${game}/textures/wad` }))))
 
@@ -242,12 +244,23 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
       const names = await importKind('wad', chosenName || 'HUD pictures', pictures)
       lines.push(`HUD pictures: ${names.length} loaded from ${chosenName || 'this folder'}.`)
     }
-    const charsets = await charsetFiles([
-      { dir: chosen, path: here },
-      { dir: await folderAt(chosen, 'charsets'), path: `${here}/charsets` },
-    ])
+    // The charset and crosshair the last imported cfg names, when they are here; else the charsets to pick from.
+    const { cfgCharset, cfgCrosshair } = useStore.getState().settings
+    const named = cfgCharset && (await findImage(chosen, ['', 'charsets'], cfgCharset, ['']))
+    if (named) lines.push(await loadCharset(chosen, cfgCharset, ['']))
+    const crosshair = cfgCrosshair && (await findImage(chosen, ['', 'crosshairs'], cfgCrosshair, ['']))
+    if (crosshair) lines.push(await loadCrosshair(chosen, cfgCrosshair, ['']))
+    const charsets = named
+      ? []
+      : (
+          await charsetFiles([
+            { dir: chosen, path: here },
+            { dir: await folderAt(chosen, 'charsets'), path: `${here}/charsets` },
+          ])
+        ).filter((c) => !crosshair || c.file.path !== crosshair.path)
     if (charsets.length) return { ok: false, charsets, lines: [...lines, `Charsets: ${charsets.length} found. Choose the one to use, or skip.`] }
-    if (lines.length) return { ok: true, lines: [...lines, 'Config, charset and crosshair: none here, so the HUD and the current ones stay.'] }
+    const rest = ['Config', !named && 'charset', !crosshair && 'crosshair'].filter(Boolean).join(', ').replace(/, (\w+)$/, ' and $1')
+    if (lines.length) return { ok: true, lines: [...lines, `${rest}: none here, so the HUD and the current ones stay.`] }
     const inside = /^(id1|qw|ezquake)$/i.test(chosenName)
       ? ` You chose the ${chosenName} folder: choose the folder that holds it.`
       : ' Choose your Quake folder, or a folder of HUD pictures (num_0, face1…) or charsets.'
@@ -260,12 +273,13 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
   const where = found.path ? ` in ${found.path}` : ''
   // Without a config (the user chose to go on without one), the HUD stays as it is and only the folder's HUD
   // pictures are loaded: which charset and crosshair to use is in the config.
+  // The charset and crosshair the last imported cfg named are still looked for.
   if (skipConfig) {
-    const lines = [
-      ...(where ? [`Quake folder found${where}.`] : []),
-      'Config: not imported, so the HUD and its settings stay as they are.',
-      'Charset and crosshair: the config names them, so the current ones stay.',
-    ]
+    const { cfgCharset, cfgCrosshair } = useStore.getState().settings
+    const lines = [...(where ? [`Quake folder found${where}.`] : []), 'Config: not imported, so the HUD and its settings stay as they are.']
+    if (cfgCharset) lines.push(await loadCharset(root, cfgCharset, GAMEDIRS))
+    if (cfgCrosshair) lines.push(await loadCrosshair(root, cfgCrosshair, GAMEDIRS))
+    if (!cfgCharset && !cfgCrosshair) lines.push('Charset and crosshair: the config names them, so the current ones stay.')
     lines.push(await loadWad(root))
     return { ok: true, lines }
   }
@@ -314,40 +328,53 @@ export async function importSetup(chosen: Folder, chosenName = '', config?: File
     importCfg(fileName(cfg), text),
   ]
   const cvars = lastValues(text)
+  const { charset, crosshair } = cfgPictures(text)
 
-  // loadcharset sets gl_consolefont, so whichever comes last wins.
-  const charsetCvar = Object.keys(cvars).filter((k) => k === 'gl_consolefont' || k === 'loadcharset').pop()
-  const charset = charsetCvar && cvars[charsetCvar].trim()
-  const charsetFile = charset ? await findImage(root, ['textures/charsets'], charset) : null
-  // Unset, the game uses povo5 (from ezquake.pk3), which the editor has.
-  if (!charset || (!charsetFile && /^povo5(\.\w+)?$/i.test(charset))) {
-    await removeKind('charset')
-    lines.push(`Charset: ${charset ? 'povo5' : "the cfg doesn't set gl_consolefont or loadcharset, so ezQuake's povo5"}, the editor's own.`)
-  } else if (charsetFile) {
-    await importKind('charset', charset, [charsetFile])
-    lines.push(`Charset: ${fileName(charsetFile)}.`)
+  if (charset) {
+    lines.push(await loadCharset(root, charset, GAMEDIRS))
   } else {
-    lines.push(`Charset: "${charset}" isn't in textures/charsets, so the current one stays.`)
+    // Unset, the game uses povo5 (from ezquake.pk3), which the editor has.
+    await removeKind('charset')
+    lines.push("Charset: the cfg doesn't set gl_consolefont or loadcharset, so ezQuake's povo5, the editor's own.")
   }
 
   const look = crosshairFromCvars(cvars)
   useStore.getState().setSettings({ crosshair: look })
-  const crosshair = cvars.crosshairimage?.trim()
-  // ezQuake loads crosshairimage from crosshairs/; textures/crosshairs is also checked.
-  const crosshairFile = crosshair ? await findImage(root, ['crosshairs', 'textures/crosshairs', 'textures/crosshair'], crosshair) : null
-  if (!crosshair) {
+  if (crosshair) {
+    lines.push(await loadCrosshair(root, crosshair, GAMEDIRS))
+  } else {
     // No image: the game draws its own crosshair, picked by the crosshair cvar.
     await removeKind('crosshair')
     lines.push(`Crosshair: ezQuake's own, crosshair ${look.crosshair}${look.crosshair ? '' : ' (none)'}.`)
-  } else if (crosshairFile) {
-    await importKind('crosshair', crosshair, [crosshairFile])
-    lines.push(`Crosshair: ${fileName(crosshairFile)}.`)
-  } else {
-    lines.push(`Crosshair: "${crosshair}" isn't in crosshairs, so the current one stays.`)
   }
 
   lines.push(await loadWad(root))
   return { ok: true, lines }
+}
+
+// The charset loadcharset / gl_consolefont names, from textures/charsets (or, in a folder that is no Quake
+// folder, from it or its charsets folder).
+async function loadCharset(root: Folder, charset: string, games: string[]): Promise<string> {
+  const file = await findImage(root, games === GAMEDIRS ? ['textures/charsets'] : ['', 'charsets'], charset, games)
+  if (file) {
+    await importKind('charset', charset, [file])
+    return `Charset: ${fileName(file)}, as the config names it.`
+  }
+  // povo5 comes in ezquake.pk3, and the editor has it.
+  if (/^povo5(\.\w+)?$/i.test(charset)) {
+    await removeKind('charset')
+    return "Charset: povo5, the editor's own."
+  }
+  return `Charset: the config names "${charset}", which isn't in ${games === GAMEDIRS ? 'textures/charsets' : 'this folder'}, so the current one stays.`
+}
+
+// The crosshair crosshairimage names, from crosshairs/ (textures/crosshairs is also checked).
+async function loadCrosshair(root: Folder, crosshair: string, games: string[]): Promise<string> {
+  const folders = games === GAMEDIRS ? ['crosshairs', 'textures/crosshairs', 'textures/crosshair'] : ['', 'crosshairs']
+  const file = await findImage(root, folders, crosshair, games)
+  if (!file) return `Crosshair: the config names "${crosshair}", which isn't in ${games === GAMEDIRS ? 'crosshairs' : 'this folder'}, so the current one stays.`
+  await importKind('crosshair', crosshair, [file])
+  return `Crosshair: ${fileName(file)}, as the config names it.`
 }
 
 async function loadWad(root: Folder): Promise<string> {

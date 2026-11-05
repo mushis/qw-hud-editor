@@ -5,12 +5,12 @@ import { ELEMENTS } from './catalog'
 import { lastValues, parseCfg, serializeCfg, splitCvar } from './cfg'
 import { EZQUAKE_DEFAULTS, isUnezquakeElement, isUnezquakeParam, withDefaults } from './defaults'
 import { IMPLS, implFor } from './elements'
-import { decodePcx, decodeTga, decodeWad } from '../render/decode'
-import { texturePriority } from '../render/textures'
+import { decodePcx, decodeTga, decodeWad, unzip, zip } from '../render/decode'
+import { CHARSET, CROSSHAIR, isHudPicture, texturePriority, texturePurpose } from '../render/textures'
 import { builtinMask, builtinPixels, crosshairFromCvars } from '../render/crosshair'
-import { findIssues } from './issues'
+import { clientIssues, findIssues, unusableResolution } from './issues'
 import { checkEncoding } from './encoding'
-import { placeTree } from './layout'
+import { keepInPlace, placeTree, unanchored } from './layout'
 import { frameExtents, layoutHud, screenFor, shouldShow, viewRect, wouldCycle } from './layout'
 import { DEFAULT_PREVIEW } from './preview'
 
@@ -374,5 +374,82 @@ describe('unezquake', () => {
     const ctx = { preview: DEFAULT_PREVIEW, screenW: 640, screenH: 480 }
     expect(implFor('totalstrength').size(EZQUAKE_DEFAULTS.totalstrength, ctx)).toEqual({ w: 72, h: 24 })
     expect(implFor('mapvote').size(EZQUAKE_DEFAULTS.mapvote, ctx)).toEqual({ w: 208, h: 132 })
+  })
+})
+
+describe('stage edits', () => {
+  const doc = withDefaults(parseCfg(nquake).doc)
+  const box = (d: typeof doc, name: string) => layoutHud(d, screen, sizer).get(name)!.outer
+
+  it('keeps the fixed corner where it was after a new scale', () => {
+    const before = box(doc, 'armor')
+    const changes = keepInPlace(doc, screen, sizer, 'armor', { scale: '2' }, 'br')
+    const after = box({ ...doc, elements: { ...doc.elements, armor: { ...doc.elements.armor, ...changes } } }, 'armor')
+    expect(after.w).toBe(before.w * 2)
+    expect([after.x + after.w, after.y + after.h]).toEqual([before.x + before.w, before.y + before.h])
+  })
+
+  it('unanchors to the screen without moving, aligned to the nearest edge', () => {
+    const before = box(doc, 'armor')
+    const changes = unanchored(doc, screen, sizer, 'armor')
+    expect(changes).toMatchObject({ place: 'screen', align_x: 'center', align_y: 'bottom' })
+    const after = box({ ...doc, elements: { ...doc.elements, armor: { ...doc.elements.armor, ...changes } } }, 'armor')
+    expect([after.x, after.y]).toEqual([before.x, before.y])
+  })
+})
+
+describe('client settings', () => {
+  const ok = { width: 1920, height: 1080, conscale: 2, conwidth: 0, conheight: 0, viewsize: 100 }
+
+  it('leaves out a 0 or too small resolution from a cfg', () => {
+    expect(unusableResolution({ width: 0, height: 0 })).toBe(true)
+    expect(unusableResolution({ width: 100 })).toBe(true)
+    expect(unusableResolution({ width: 1920, height: 1080 })).toBe(false)
+    expect(unusableResolution({ conscale: 2 })).toBe(false)
+  })
+
+  it('lists odd resolutions and virtual sizes', () => {
+    expect(clientIssues(ok, null)).toEqual([])
+    expect(clientIssues(ok, { width: 0, height: 0 })[0].message).toMatch(/desktop resolution/)
+    expect(clientIssues({ ...ok, width: 1920, height: 200 }, null).map((i) => i.cvar)).toEqual(['vid_width'])
+    expect(clientIssues({ ...ok, conwidth: 4000 }, null)[0].fix?.settings).toEqual({ conwidth: 1920 })
+    expect(clientIssues({ ...ok, conscale: 0 }, null).map((i) => i.cvar)).toEqual(['vid_conscale'])
+  })
+})
+
+describe('zip', () => {
+  it('reads back what it writes', async () => {
+    const files = [
+      { path: 'myhud.cfg', data: new TextEncoder().encode('hud_recalculate') },
+      { path: 'textures/wad/num_0.png', data: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]) },
+    ]
+    const back = await unzip(new Uint8Array(await zip(files).arrayBuffer()))
+    expect(back.map((f) => [f.path, [...f.data]])).toEqual(files.map((f) => [f.path, [...f.data]]))
+  })
+})
+
+describe('which textures are loaded', () => {
+  it('knows every picture the editor draws, and no menu graphics', () => {
+    const own = readdirSync(join(__dirname, '../../public/assets/wad')).map((f) => f.replace(/[.][^.]+$/, ''))
+    expect(own.filter((n) => !isHudPicture(n))).toEqual([])
+    const menu = ['bigbox', 'box_tl', 'complete', 'conback', 'cursor', 'finale', 'inter', 'loading', 'mainmenu', 'menudot1', 'mp_menu', 'p_option', 'pause', 'qplaque', 'ranking', 'sp_menu', 'ttl_main', 'vidmodes', 'flags', 'conchars']
+    expect(menu.filter(isHudPicture)).toEqual([])
+  })
+
+  it('takes from folders only HUD pictures, the charset, the crosshair and group pictures', () => {
+    expect(texturePurpose('qw/gfx/conback.png', true)).toBeNull()
+    expect(texturePurpose('qw/gfx/mainmenu.png', true)).toBeNull()
+    expect(texturePurpose('qw/textures/wad/num_0.tga', true)).toBe('num_0')
+    expect(texturePurpose('qw/textures/charsets/povo5.png', true)).toBe(CHARSET)
+    expect(texturePurpose('qw/crosshairs/dot.png', true)).toBe(CROSSHAIR)
+    expect(texturePurpose('qw/gfx/logo.png', true)).toBeNull()
+    expect(texturePurpose('qw/gfx/logo.png', true, new Set(['logo']))).toBe('logo')
+  })
+
+  it('takes a file dropped on its own by its name', () => {
+    expect(texturePurpose('mycrosshair.png', false)).toBe(CROSSHAIR)
+    expect(texturePurpose('charset-big.png', false)).toBe(CHARSET)
+    expect(texturePurpose('logo.png', false)).toBe('logo')
+    expect(texturePurpose('conback.png', false)).toBeNull()
   })
 })

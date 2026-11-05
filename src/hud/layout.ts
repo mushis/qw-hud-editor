@@ -204,6 +204,41 @@ export function layoutHud(doc: HudDoc, screen: Screen, sizer: Sizer): Map<string
   return placed
 }
 
+export type Corner = 'tl' | 'tr' | 'bl' | 'br'
+
+// What dragging a corner changes: scale when the element has it, else its width and height (groups, bars).
+export type ResizeBy = 'scale' | 'size' | null
+export const resizeBy = (params: Params | undefined): ResizeBy =>
+  !params ? null : 'scale' in params ? 'scale' : 'width' in params && 'height' in params ? 'size' : null
+
+// Changes to an element plus the pos_x / pos_y that keep its `corner` where it is now on the screen, e.g. after
+// a new scale or place. pos is added to the aligned position, so the shift is exact.
+export function keepInPlace(doc: HudDoc, screen: Screen, sizer: Sizer, name: string, changes: Params, corner: Corner = 'tl'): Params {
+  const before = layoutHud(doc, screen, sizer).get(name)
+  const next: HudDoc = { ...doc, elements: { ...doc.elements, [name]: { ...doc.elements[name], ...changes } } }
+  const after = layoutHud(next, screen, sizer).get(name)
+  if (!before || !after) return changes
+  const at = (r: Rect) => [corner[1] === 'r' ? r.x + r.w : r.x, corner[0] === 'b' ? r.y + r.h : r.y]
+  const [bx, by] = at(before.outer)
+  const [ax, ay] = at(after.outer)
+  const p = next.elements[name]
+  return { ...changes, pos_x: String(num(p.pos_x) + bx - ax), pos_y: String(num(p.pos_y) + by - ay) }
+}
+
+// What puts an element placed on another one on the screen instead, where it is now. It is aligned to the
+// nearest screen edge (or the centre), which keeps pos small and the element there at other resolutions.
+export function unanchored(doc: HudDoc, screen: Screen, sizer: Sizer, name: string): Params {
+  const box = layoutHud(doc, screen, sizer).get(name)?.outer
+  const third = (at: number, size: number, sides: [string, string, string]) => sides[Math.min(2, Math.max(0, Math.floor((at / size) * 3)))]
+  const align = box
+    ? {
+        align_x: third(box.x + box.w / 2, screen.width, ['left', 'center', 'right']),
+        align_y: third(box.y + box.h / 2, screen.height, ['top', 'center', 'bottom']),
+      }
+    : { align_x: 'left', align_y: 'top' }
+  return keepInPlace(doc, screen, sizer, name, { place: 'screen', ...align })
+}
+
 // Draw order: ascending "order", ties keep registration order (HUD_Sort).
 export function drawOrder(placed: Map<string, Placed>, registration: string[]): Placed[] {
   const index = new Map(registration.map((n, i) => [n, i]))

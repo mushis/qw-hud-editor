@@ -2,7 +2,7 @@
 // Only elements with show on are checked: a hidden element has no visible problem.
 
 import { ELEMENTS } from './catalog'
-import type { HudDoc } from './cfg'
+import type { ClientSettings, HudDoc } from './cfg'
 import { ALIGN_X, ALIGN_Y, SCREEN_AREAS, shouldShow, wouldCycle, type Placed, type Screen } from './layout'
 import { findPicture, pictureName } from './pictures'
 
@@ -92,6 +92,90 @@ export function findIssues(doc: HudDoc, placed: Map<string, Placed>, screen: Scr
 
     if (name.startsWith('group') && pictureName(p.picture) && !findPicture(p.picture)) {
       add('info', `picture "${p.picture}" (gfx/${pictureName(p.picture)}) isn't available in the editor: drop the image file onto the editor to show it.`)
+    }
+  }
+  return issues
+}
+
+// ---------------------------------------------------------------- client settings
+
+// A problem with the resolution or the HUD's virtual size, and what fixes it.
+export interface ClientIssue {
+  cvar: string
+  severity: Severity
+  message: string
+  fix?: { label: string; title: string; settings: Partial<ClientSettings> & { cfgResolution?: null } }
+}
+
+const MAX_SIDE = 16384
+
+// A vid_width / vid_height from a cfg the editor can't show: 0 (ezQuake then uses the desktop resolution), below
+// the 320×200 ezQuake allows, or bigger than any screen.
+export function unusableResolution({ width, height }: Partial<ClientSettings>): boolean {
+  const bad = (v: number | undefined, min: number) => v !== undefined && (v < min || v > MAX_SIDE)
+  return bad(width, 320) || bad(height, 200)
+}
+
+const ratio = (w: number, h: number) => (h ? w / h : 0)
+
+// Checks the client settings, and the resolution the last cfg set but the editor didn't use.
+export function clientIssues(s: ClientSettings, fromCfg: { width?: number; height?: number } | null): ClientIssue[] {
+  const issues: ClientIssue[] = []
+  const here = `${s.width}×${s.height}`
+  if (fromCfg) {
+    const { width: w, height: h } = fromCfg
+    const set = [w !== undefined && `vid_width ${w}`, h !== undefined && `vid_height ${h}`].filter(Boolean).join(' and ')
+    const why =
+      w === 0 || h === 0
+        ? 'With 0, ezQuake uses your desktop resolution (vid_usedesktopres 1, its default), or 1024×768 when that is off'
+        : (w !== undefined && w > MAX_SIDE) || (h !== undefined && h > MAX_SIDE)
+          ? "That is bigger than any screen ezQuake can open"
+          : 'ezQuake uses at least 320×200'
+    issues.push({
+      cvar: w !== undefined ? 'vid_width' : 'vid_height',
+      severity: 'warning',
+      message: `The config sets ${set}. ${why}. The editor kept ${here}: pick your resolution at the top.`,
+      fix: { label: 'Dismiss', title: `Keep ${here} and hide this.`, settings: { cfgResolution: null } },
+    })
+  }
+  const r = ratio(s.width, s.height)
+  if (r > 4 || r < 1) {
+    issues.push({
+      cvar: 'vid_width',
+      severity: 'info',
+      message: `${here} is an unusual shape for a screen (${r < 1 ? 'taller than wide' : `${r.toFixed(1)} times wider than tall`}): check vid_width and vid_height.`,
+      fix: { label: 'Use 1920×1080', title: 'Set the resolution to 1920×1080.', settings: { width: 1920, height: 1080, cfgResolution: null } },
+    })
+  }
+  if (!s.conwidth && !s.conheight && s.conscale <= 0) {
+    issues.push({
+      cvar: 'vid_conscale',
+      severity: 'warning',
+      message: `vid_conscale ${s.conscale}: ezQuake then makes the HUD's virtual size the full resolution, so everything is tiny.`,
+      fix: { label: 'Use 2', title: 'Set vid_conscale to 2, its default.', settings: { conscale: 2 } },
+    })
+  }
+  const sides: [keyof ClientSettings, string, number, number, string][] = [
+    ['conwidth', 'vid_conwidth', s.width, 320, 'vid_width'],
+    ['conheight', 'vid_conheight', s.height, 200, 'vid_height'],
+  ]
+  for (const [key, cvar, max, min, of] of sides) {
+    const v = s[key]
+    if (!v) continue
+    if (v > max) {
+      issues.push({
+        cvar,
+        severity: 'info',
+        message: `${cvar} ${v} is more than ${of} ${max}: ezQuake uses ${max}.`,
+        fix: { label: `Use ${max}`, title: `Set ${cvar} to ${max}.`, settings: { [key]: max } },
+      })
+    } else if (v < min) {
+      issues.push({
+        cvar,
+        severity: 'info',
+        message: `${cvar} ${v} is below ${min}: ezQuake uses ${min}.`,
+        fix: { label: `Use ${min}`, title: `Set ${cvar} to ${min}.`, settings: { [key]: min } },
+      })
     }
   }
   return issues
