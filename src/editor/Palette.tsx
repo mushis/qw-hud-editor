@@ -3,6 +3,7 @@ import { CATEGORY_LABELS, ELEMENTS, type Category, type Condition } from '../hud
 import { isUnezquakeElement } from '../hud/defaults'
 import { placeTree, shouldShow } from '../hud/layout'
 import { useStore } from '../store'
+import { cvar, tip } from './tip'
 import { useHudLayout } from './useHudLayout'
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[]
@@ -27,7 +28,7 @@ function Item({ name, description, condition, depth }: { name: string; descripti
   return (
     <div
       className={`palette-item${selected ? ' selected' : ''}${active ? '' : ' inactive'}`}
-      title={active ? description : `${description}. Not visible in the current "View as" mode.`}
+      {...tip(cvar(name), active ? description : `${description}. Not visible in the current "View as" mode.`)}
       onClick={() => params && select(name)}
       onPointerEnter={() => hover(name)}
       onPointerLeave={() => hover(null)}
@@ -37,6 +38,7 @@ function Item({ name, description, condition, depth }: { name: string; descripti
         type="checkbox"
         checked={shown}
         disabled={!params}
+        {...tip(cvar(name, 'show'), shown ? 'Shown: click to hide it' : 'Hidden: click to show it')}
         onClick={(ev) => ev.stopPropagation()}
         onChange={() => {
           editParams(name, { show: shown ? '0' : '1' })
@@ -48,7 +50,7 @@ function Item({ name, description, condition, depth }: { name: string; descripti
         {name}
       </span>
       {isUnezquakeElement(name) && (
-        <em className="tag unez" title="Only in unezquake: ezQuake doesn't have this element and ignores its settings">
+        <em className="tag unez" {...tip(cvar(name), "Only in unezquake: ezQuake doesn't have this element and ignores its settings")}>
           unez
         </em>
       )}

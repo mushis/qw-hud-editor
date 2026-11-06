@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { DEFAULTS_SOURCE, defaultValue } from '../hud/defaults'
 import { clientIssues, findIssues, type Issue, type Severity } from '../hud/issues'
 import { useStore } from '../store'
+import { cvar, tip } from './tip'
 import { useHudLayout } from './useHudLayout'
 
 const ICONS: Record<Severity, string> = { error: '●', warning: '▲', info: 'i' }
@@ -45,7 +46,7 @@ export function Issues() {
               <span className="mono">{issue.cvar}</span>
               <span className="message">{issue.message}</span>
               {issue.fix ? (
-                <button className="issue-reset" onClick={() => setSettings(issue.fix!.settings)} title={issue.fix.title}>
+                <button className="issue-reset" onClick={() => setSettings(issue.fix!.settings)} {...tip(issue.cvar, issue.fix.title)}>
                   {issue.fix.label}
                 </button>
               ) : (
@@ -71,10 +72,15 @@ export function Issues() {
                     e.stopPropagation()
                     reset(issue)
                   }}
-                  title={`Set ${Object.entries(defaultsFor(issue))
-                    .map(([p, v]) => `${issue.element}_${p} back to its ezQuake default "${v}"`)
-                    .join(' and ')}, and select ${issue.element}. This often fixes the issue. You can undo this.
-(defaults from ${DEFAULTS_SOURCE})`}
+                  {...tip(
+                    Object.keys(defaultsFor(issue))
+                      .map((p) => cvar(issue.element, p))
+                      .join(', '),
+                    `Back to the ezQuake default (${Object.entries(defaultsFor(issue))
+                      .map(([p, v]) => `${p} "${v}"`)
+                      .join(', ')}), and select ${issue.element}. This often fixes the issue. You can undo this.
+(defaults from ${DEFAULTS_SOURCE})`,
+                  )}
                 >
                   Reset property
                 </button>

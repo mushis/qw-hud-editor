@@ -24,6 +24,12 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
           {visitors.toLocaleString('en-US')} {visitors === 1 ? 'visitor' : 'visitors'}
         </p>
       )}
+      <p className="about-credits">
+        Version {__VERSION_DATE__} · made by mushi, vibe coded with Claude ·{' '}
+        <a href="https://github.com/mushis/qw-hud-editor" target="_blank" rel="noreferrer">
+          source on GitHub
+        </a>
+      </p>
       {admin && <AdminPanel />}
       <p>
         Edits the ezQuake HUD (<code>scr_newhud 1</code>). The HUD is a set of <code>hud_&lt;element&gt;_&lt;setting&gt;</code> cvars, and

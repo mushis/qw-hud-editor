@@ -15,6 +15,7 @@ import { SetupDialog } from './SetupDialog'
 import { currentCfg, importCfg, loadEmptyHud } from './actions'
 import { readCfgFile } from './cfgFile'
 import { downloadText, fetchPreset, PRESETS } from './io'
+import { tip } from './tip'
 
 const RESOLUTIONS: [number, number][] = [
   [1920, 1080],
@@ -164,11 +165,11 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
         </select>
       </div>
 
-      <fieldset className="group client" title="Game settings that change the whole HUD, not one element">
+      <fieldset className="group client" {...tip(undefined, 'Game settings that change the whole HUD, not one element')}>
         <legend>Settings</legend>
         <select
           value={resolution}
-          title="Game resolution (vid_width × vid_height)"
+          {...tip('vid_width, vid_height', 'Game resolution')}
           onChange={(e) => {
             const [width, height] = e.target.value.split('x').map(Number)
             setSettings({ width, height, cfgResolution: null })
@@ -180,7 +181,12 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             </option>
           ))}
         </select>
-        <label title="Divides the resolution to get the HUD's virtual size: 1920×1080 at conscale 2 is 960×540. Higher means fewer virtual pixels, so everything looks bigger. Only used while con W × H is on auto.">
+        <label
+          {...tip(
+            'vid_conscale',
+            "Divides the resolution to get the HUD's virtual size: 1920×1080 at conscale 2 is 960×540. Higher means fewer virtual pixels, so everything looks bigger. Only used while con W × H is on auto.",
+          )}
+        >
           conscale
           <input
             type="number"
@@ -192,7 +198,12 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             onChange={(e) => setSettings({ conscale: Math.max(0.5, parseFloat(e.target.value) || 2) })}
           />
         </label>
-        <label title="Sets the HUD's virtual size directly (vid_conwidth × vid_conheight) and overrides conscale. If its proportions differ from the resolution's, the game stretches the HUD. Grey numbers show the size conscale gives right now.">
+        <label
+          {...tip(
+            'vid_conwidth, vid_conheight',
+            "Sets the HUD's virtual size directly and overrides conscale. If its proportions differ from the resolution's, the game stretches the HUD. Grey numbers show the size conscale gives right now.",
+          )}
+        >
           con
           <input
             type="number"
@@ -212,12 +223,17 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             onChange={(e) => setSettings({ conheight: Math.max(0, parseInt(e.target.value, 10) || 0) })}
           />
           {!auto && (
-            <button title="Clears con W × H so the virtual size comes from the resolution and conscale again." onClick={() => setSettings({ conwidth: 0, conheight: 0 })}>
+            <button {...tip('vid_conwidth, vid_conheight', 'Clears con W × H so the virtual size comes from the resolution and conscale again.')} onClick={() => setSettings({ conwidth: 0, conheight: 0 })}>
               auto
             </button>
           )}
         </label>
-        <label title="viewsize: below 100 the 3D view shrinks (the view place shrinks with it); 100, 110 and 120 set the status bar height used by the sbar/ibar/hbar places">
+        <label
+          {...tip(
+            'viewsize',
+            'Below 100 the 3D view shrinks (the view place shrinks with it); 100, 110 and 120 set the status bar height used by the sbar/ibar/hbar places',
+          )}
+        >
           viewsize
           <select value={settings.viewsize} onChange={(e) => setSettings({ viewsize: Number(e.target.value) })}>
             {viewsizes.map((v) => (
@@ -227,7 +243,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             ))}
           </select>
         </label>
-        <label title="Also write these settings (vid_width, vid_height, vid_conscale, vid_conwidth, vid_conheight, viewsize) when exporting">
+        <label {...tip('vid_width, vid_height, vid_conscale, vid_conwidth, vid_conheight, viewsize', 'Also write these settings when exporting')}>
           <input type="checkbox" checked={settings.exportClient} onChange={(e) => setSettings({ exportClient: e.target.checked })} />
           export
         </label>
@@ -248,7 +264,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
         </label>
       </div>
 
-      <fieldset className="group client" title="How the HUD looks in the editor: your Quake setup, background, text font and textures">
+      <fieldset className="group client" {...tip(undefined, 'How the HUD looks in the editor: your Quake setup, background, text font and textures')}>
         <legend>HUD editor appearance</legend>
         <button
           onClick={() => setDialog('setup')}
@@ -294,7 +310,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
             saveCustomBackground(file).then(() => setSettings({ background: CUSTOM_BACKGROUND }))
           }}
         />
-        <button onClick={() => setDialog('proportional')} title="Set proportional (TTF font text) on every element at once, and load the font">
+        <button onClick={() => setDialog('proportional')} {...tip('hud_*_proportional', 'Set proportional (TTF font text) on every element at once, and load the font')}>
           Proportional…
         </button>
         <button

@@ -7,6 +7,7 @@ import { CUSTOM_BACKGROUND, useCustomBackground, useTextures } from '../render/t
 import { useStore } from '../store'
 import { StageHints } from './StageHints'
 import { StageMenu } from './StageMenu'
+import { cvar, tip } from './tip'
 import { useHudLayout } from './useHudLayout'
 
 interface Drag {
@@ -205,7 +206,7 @@ export function Stage() {
         key={`m-${p.name}`}
         className={`offscreen-marker${p.name === selected ? ' selected' : ''}`}
         style={{ left: cx, top: cy, transform: `translate(${tx}, ${ty})` }}
-        title={`${p.name} is off-screen (x ${o.x}, y ${o.y})`}
+        {...tip(`${cvar(p.name, 'pos_x')}, ${cvar(p.name, 'pos_y')}`, `${p.name} is off-screen (x ${o.x}, y ${o.y})`)}
         onPointerDown={(e) => {
           e.stopPropagation()
           select(p.name)
@@ -451,7 +452,9 @@ export function Stage() {
                   className={`resize-handle ${c}`}
                   style={{ left: (c[1] === 'l' ? sel.outer.x : sel.outer.x + Math.max(MIN_HIT, sel.outer.w)) * kx, top: (c[0] === 't' ? sel.outer.y : sel.outer.y + Math.max(MIN_HIT, sel.outer.h)) * ky }}
                   onPointerDown={(e) => onCornerDown(e, c)}
-                  title={resizable === 'scale' ? 'Drag to change the scale' : 'Drag to change width and height'}
+                  {...(resizable === 'scale'
+                    ? tip(cvar(sel.name, 'scale'), 'Drag to change the scale')
+                    : tip(`${cvar(sel.name, 'width')}, ${cvar(sel.name, 'height')}`, 'Drag to change width and height'))}
                 />
               ))}
           </div>

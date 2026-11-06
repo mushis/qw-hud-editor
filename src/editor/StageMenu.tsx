@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { DEFAULTS_SOURCE, EZQUAKE_DEFAULTS } from '../hud/defaults'
 import { parsePlace, unanchored } from '../hud/layout'
 import { useStore } from '../store'
+import { cvar, tip } from './tip'
 import { useHudLayout } from './useHudLayout'
 
 // Moves that put the element on the screen at an edge or the centre: place screen, position 0, and the align that
@@ -54,9 +55,12 @@ export function StageMenu({ name, x, y, onClose }: { name: string; x: number; y:
         <button
           key={label}
           role="menuitem"
-          title={`place screen, pos_x 0, pos_y 0, ${Object.entries(values)
-            .map(([k, v]) => `${k} ${v}`)
-            .join(', ')}`}
+          {...tip(
+            ['place', 'pos_x', 'pos_y', ...Object.keys(values)].map((p) => cvar(name, p)).join(', '),
+            `place screen, pos_x 0, pos_y 0, ${Object.entries(values)
+              .map(([k, v]) => `${k} ${v}`)
+              .join(', ')}`,
+          )}
           onClick={() => {
             useStore.getState().editParams(name, { place: 'screen', pos_x: '0', pos_y: '0', ...values })
             onClose()
@@ -69,7 +73,7 @@ export function StageMenu({ name, x, y, onClose }: { name: string; x: number; y:
       {parent && (
         <button
           role="menuitem"
-          title={`${name} will no longer be placed on ${parent}, but on the screen instead (place screen). It stays where it is now, aligned to the nearest screen edge, and no longer moves with ${parent}. You can undo this.`}
+          {...tip(cvar(name, 'place'), `${name} will no longer be placed on ${parent}, but on the screen instead (place screen). It stays where it is now, aligned to the nearest screen edge, and no longer moves with ${parent}. You can undo this.`)}
           onClick={() => {
             useStore.getState().editParams(name, unanchored(doc, screen, sizer, name))
             onClose()
@@ -81,7 +85,7 @@ export function StageMenu({ name, x, y, onClose }: { name: string; x: number; y:
       {attached.length > 0 && (
         <button
           role="menuitem"
-          title={`The ${attached.length} elements placed on ${name} (${attached.join(', ')}) will be placed on the screen instead (place screen). They stay where they are now, aligned to the nearest screen edge, and no longer move with ${name}. You can undo this.`}
+          {...tip(attached.map((n) => cvar(n, 'place')).join(', '), `The ${attached.length} elements placed on ${name} (${attached.join(', ')}) will be placed on the screen instead (place screen). They stay where they are now, aligned to the nearest screen edge, and no longer move with ${name}. You can undo this.`)}
           onClick={() => {
             useStore.getState().editMany(Object.fromEntries(attached.map((n) => [n, unanchored(doc, screen, sizer, n)])))
             onClose()
@@ -95,8 +99,11 @@ export function StageMenu({ name, x, y, onClose }: { name: string; x: number; y:
           <hr />
           <button
             role="menuitem"
-            title={`Set every setting of ${name} back to the value a fresh ezQuake install uses. You can undo this.
-(defaults from ${DEFAULTS_SOURCE})`}
+            {...tip(
+              cvar(name),
+              `Set every setting of ${name} back to the value a fresh ezQuake install uses. You can undo this.
+(defaults from ${DEFAULTS_SOURCE})`,
+            )}
             onClick={() => {
               useStore.getState().editParams(name, EZQUAKE_DEFAULTS[name])
               onClose()

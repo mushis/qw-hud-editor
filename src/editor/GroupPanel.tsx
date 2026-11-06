@@ -6,6 +6,7 @@ import { useTextures } from '../render/textures'
 import { useStore } from '../store'
 import { useHudLayout } from './useHudLayout'
 import { Combobox, type ComboOption } from './fields'
+import { cvar, tip } from './tip'
 
 const SCALEMODES = ['top-left', 'tile', 'stretch', 'grow', 'centre']
 
@@ -103,11 +104,11 @@ export function GroupPanel({ group }: { group: string }) {
       {attached.length ? (
         <ul>
           {attached.map((n) => (
-            <li key={n} className={shouldShow(doc.elements[n]?.show) ? undefined : 'off'} title={shouldShow(doc.elements[n]?.show) ? undefined : `${n} is hidden`}>
-              <button className="link" onClick={() => select(n)} title={`Select ${n}`}>
+            <li key={n} className={shouldShow(doc.elements[n]?.show) ? undefined : 'off'} {...(shouldShow(doc.elements[n]?.show) ? {} : tip(cvar(n, 'show'), `${n} is hidden`))}>
+              <button className="link" onClick={() => select(n)} {...tip(cvar(n), `Select ${n}`)}>
                 {n}
               </button>
-              <button onClick={() => editParams(n, { place: 'screen' })} title={`Set ${n}'s place to screen. You can undo this.`}>
+              <button onClick={() => editParams(n, { place: 'screen' })} {...tip(cvar(n, 'place'), `Set ${n}'s place to screen. You can undo this.`)}>
                 Detach
               </button>
             </li>
@@ -116,7 +117,7 @@ export function GroupPanel({ group }: { group: string }) {
       ) : (
         <p className="hint">Nothing is placed on {group}.</p>
       )}
-      <div title={`Set an element's place to ${group}; it then moves with it. You can undo this.`}>
+      <div {...tip(cvar('<element>', 'place'), `Set an element's place to ${group}; it then moves with it. You can undo this.`)}>
         <Combobox
           key={attachKey}
           value=""
@@ -131,7 +132,7 @@ export function GroupPanel({ group }: { group: string }) {
 
       <h3>Picture</h3>
       <div className="group-picture">
-        <button className="group-picture-box" onClick={() => setPicking(!picking)} title="Choose the picture from the ones loaded">
+        <button className="group-picture-box" onClick={() => setPicking(!picking)} {...tip(cvar(group, 'picture'), 'Choose the picture from the ones loaded')}>
           {picture ? (
             <img src={picture.url} alt="" style={{ opacity: alpha }} />
           ) : (

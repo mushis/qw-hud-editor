@@ -7,6 +7,7 @@ import { ALIGN_X, ALIGN_Y, SCREEN_AREAS, wouldCycle } from '../hud/layout'
 import { useStore } from '../store'
 import { CopyFrom } from './CopyFrom'
 import { GroupPanel } from './GroupPanel'
+import { cvar, tip } from './tip'
 import { Checkbox, ColorField, Combobox, NumberField, Select, SliderField, TextField, type ComboOption } from './fields'
 import { useHudLayout } from './useHudLayout'
 
@@ -166,10 +167,10 @@ export function Inspector() {
     const invalid = invalidReason(doc, selected, p)
     return (
       <tr key={p} className={[changed && 'changed', invalid && 'invalid'].filter(Boolean).join(' ') || undefined}>
-        <th title={invalid ?? (fallback !== undefined ? `default: "${fallback}"` : 'not an ezQuake default cvar')}>
+        <th {...tip(cvar(selected, p), invalid ?? (fallback !== undefined ? `default: "${fallback}"` : 'not an ezQuake default cvar'))}>
           {p}
           {!isUnezquakeElement(selected) && isUnezquakeParam(selected, p) && (
-            <em className="tag unez" title="Only in unezquake: ezQuake ignores this setting">
+            <em className="tag unez" {...tip(cvar(selected, p), 'Only in unezquake: ezQuake ignores this setting')}>
               unez
             </em>
           )}
@@ -180,7 +181,7 @@ export function Inspector() {
         </td>
         <td className="reset">
           {changed && (
-            <button title={`Reset to default "${fallback}"`} onClick={() => (p === 'place' ? onPlace(fallback) : set(p, fallback))}>
+            <button {...tip(cvar(selected, p), `Reset to default "${fallback}"`)} onClick={() => (p === 'place' ? onPlace(fallback) : set(p, fallback))}>
               ↺
             </button>
           )}
@@ -215,8 +216,11 @@ export function Inspector() {
               editParams(selected, defaults)
               setNote({ element: selected, message: `${selected} is back to the ezQuake defaults.`, bad: false })
             }}
-            title={`Set every setting of ${selected} back to the value a fresh ezQuake install uses. You can undo this.
-(defaults from ${DEFAULTS_SOURCE})`}
+            {...tip(
+              cvar(selected),
+              `Set every setting of ${selected} back to the value a fresh ezQuake install uses. You can undo this.
+(defaults from ${DEFAULTS_SOURCE})`,
+            )}
           >
             Reset
           </button>

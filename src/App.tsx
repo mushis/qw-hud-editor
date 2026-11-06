@@ -10,6 +10,7 @@ import { Issues } from './editor/Issues'
 import { Palette } from './editor/Palette'
 import { Stage } from './editor/Stage'
 import { Toolbar } from './editor/Toolbar'
+import { Tooltip } from './editor/Tooltip'
 import { loadVisitors, useGallery } from './gallery/api'
 import { droppedFiles, isTextureFile, loadCustomBackground, loadHudFont, loadSavedTextures } from './render/textures'
 import { hasSavedDoc, useStore } from './store'
@@ -140,6 +141,7 @@ export default function App() {
       </main>
       <Inspector />
       <EncodingDialog />
+      <Tooltip />
       {dragging && (
         <div className="drop-overlay">
           <div>

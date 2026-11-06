@@ -121,7 +121,7 @@ const pk3 = readZip(await download('gpl/ezquake/ezquake.pk3'))
 await writeFile(join(CHARSET_OUT, 'povo5.png'), pk3.get('textures/charsets/povo5.png')())
 console.log('charset povo5.png')
 // Sample HUDs left out of the preset list.
-const SKIP_PRESETS = /^hud_(berzerk|dithes_\w+|empezar|murdoc)\.cfg$/
+const SKIP_PRESETS = /^hud_(berzerk|dithes_\w+|empezar|murdoc|rotker)\.cfg$/
 for (const [name, read] of pk3) {
   const m = name.match(/^cfg\/(hud_[\w]+\.cfg)$/)
   if (m && !SKIP_PRESETS.test(m[1])) { await writeFile(join(PRESET_OUT, m[1]), read()); console.log('preset', m[1]) }

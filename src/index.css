@@ -357,6 +357,13 @@ main {
   font-size: 12px;
 }
 
+.about-credits {
+  margin: 0 0 12px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+}
+
 .stage-view {
   position: absolute;
   background: #000;
@@ -1893,4 +1900,28 @@ input.switch:focus-visible {
   background: var(--note-bg);
   border: 1px solid var(--note-border);
   border-radius: 4px;
+}
+
+/* The tooltip of HUD cvars (Tooltip.tsx): the cvar names in bold, then the text. */
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 360px;
+  padding: 5px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-line;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.tooltip b {
+  display: block;
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--accent);
+  overflow-wrap: anywhere;
 }
