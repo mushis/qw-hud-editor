@@ -604,6 +604,13 @@ main {
   color: var(--warn);
 }
 
+/* An invalid value that looks the same in game. */
+.row-note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--info);
+}
+
 .rgb-fields {
   display: flex;
   flex: 1;

@@ -167,12 +167,21 @@ describe('issues', () => {
       ping: { show: '1', place: 'screen', align_x: 'right', pos_x: '20' },
       clock: { show: '1', place: 'center', align_x: 'top', align_y: 'left' },
     })
+    // align_x "top" and align_y "left" fall back to left and top, which is where they put it anyway: only info.
     expect(issues.map((i) => `${i.element} ${i.severity}`)).toEqual([
       'clock warning',
-      'clock warning',
-      'clock warning',
+      'clock info',
+      'clock info',
       'fps error',
       'ping warning',
+    ])
+  })
+
+  it('warns about invalid aligns that move the element', () => {
+    const issues = issuesOf({ clock: { show: '1', align_x: 'bottom', align_y: 'right' } })
+    expect(issues.map((i) => `${i.severity} ${i.message}`)).toEqual([
+      'warning align_x "bottom" is not valid: the game uses "left".',
+      'warning align_y "right" is not valid: the game uses "top".',
     ])
   })
 

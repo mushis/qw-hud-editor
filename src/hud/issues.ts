@@ -41,6 +41,11 @@ export const minValue = (param: string) => (NEGATIVE_OK.has(param) || TEXT_PARAM
 
 const isOneOf = (list: readonly string[], value: string) => list.includes(value.toLowerCase())
 
+// An invalid align that lands where its word says anyway: ezQuake falls back to left for align_x and top for
+// align_y, so align_x "top" and align_y "left" look the same as a valid value would.
+export const harmlessAlign = (param: string, value: string) =>
+  (param === 'align_x' && value.trim().toLowerCase() === 'top') || (param === 'align_y' && value.trim().toLowerCase() === 'left')
+
 // Why a place / align_x / align_y value is invalid, or null. ezQuake (HUD_FindPlace, HUD_FindAlignX/Y)
 // silently falls back on a bad value. Screen areas and aligns ignore case; element names don't.
 export function invalidReason(doc: HudDoc, element: string, param: string): string | null {
@@ -55,9 +60,15 @@ export function invalidReason(doc: HudDoc, element: string, param: string): stri
         : `place "${value}" is not a screen area or element: the game uses "screen".`
     }
     case 'align_x':
-      return isOneOf(ALIGN_X, value) ? null : `align_x "${value}" is not valid: the game uses "left".`
+      if (isOneOf(ALIGN_X, value)) return null
+      return harmlessAlign(param, value)
+        ? `align_x "${value}" is not a valid value: the game uses "left", which is the same here.`
+        : `align_x "${value}" is not valid: the game uses "left".`
     case 'align_y':
-      return isOneOf(ALIGN_Y, value) ? null : `align_y "${value}" is not valid: the game uses "top".`
+      if (isOneOf(ALIGN_Y, value)) return null
+      return harmlessAlign(param, value)
+        ? `align_y "${value}" is not a valid value: the game uses "top", which is the same here.`
+        : `align_y "${value}" is not valid: the game uses "top".`
   }
   if (NUMBER.test(value) && parseFloat(value) < minValue(param)) return `${param} can't be negative.`
   return null
@@ -72,7 +83,7 @@ export function findIssues(doc: HudDoc, placed: Map<string, Placed>, screen: Scr
 
     for (const param of Object.keys(p)) {
       const reason = invalidReason(doc, name, param)
-      if (reason) add('warning', reason, [param])
+      if (reason) add(harmlessAlign(param, p[param]) ? 'info' : 'warning', reason, [param])
     }
     const parent = (p.place ?? '').replace(/^@/, '')
     const isElement = parent !== name && !!doc.elements[parent]

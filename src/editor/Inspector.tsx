@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ELEMENT_BY_NAME, ELEMENTS } from '../hud/catalog'
 import { DEFAULTS_SOURCE, defaultValue, EZQUAKE_DEFAULTS, isUnezquakeElement, isUnezquakeParam } from '../hud/defaults'
 import { isColorParam, isPaletteColor } from '../hud/colors'
-import { invalidReason, minValue, TEXT_PARAMS } from '../hud/issues'
+import { harmlessAlign, invalidReason, minValue, TEXT_PARAMS } from '../hud/issues'
 import { ALIGN_X, ALIGN_Y, SCREEN_AREAS, wouldCycle } from '../hud/layout'
 import { useStore } from '../store'
 import { CopyFrom } from './CopyFrom'
@@ -165,8 +165,10 @@ export function Inspector() {
     const fallback = defaultValue(selected, p)
     const changed = fallback !== undefined && params[p] !== fallback
     const invalid = invalidReason(doc, selected, p)
+    // An invalid value that looks the same in game gets a note, not the error colour.
+    const harmless = invalid !== null && harmlessAlign(p, params[p])
     return (
-      <tr key={p} className={[changed && 'changed', invalid && 'invalid'].filter(Boolean).join(' ') || undefined}>
+      <tr key={p} className={[changed && 'changed', invalid && !harmless && 'invalid'].filter(Boolean).join(' ') || undefined}>
         <th {...tip(cvar(selected, p), invalid ?? (fallback !== undefined ? `default: "${fallback}"` : 'not an ezQuake default cvar'))}>
           {p}
           {!isUnezquakeElement(selected) && isUnezquakeParam(selected, p) && (
@@ -177,7 +179,7 @@ export function Inspector() {
         </th>
         <td>
           {editor(p)}
-          {invalid && <div className="row-error">{invalid}</div>}
+          {invalid && <div className={harmless ? 'row-note' : 'row-error'}>{invalid}</div>}
         </td>
         <td className="reset">
           {changed && (
