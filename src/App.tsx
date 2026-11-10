@@ -9,6 +9,7 @@ import { Inspector } from './editor/Inspector'
 import { Issues } from './editor/Issues'
 import { Palette } from './editor/Palette'
 import { Stage } from './editor/Stage'
+import { ResolutionDialog } from './editor/ResolutionDialog'
 import { Toolbar } from './editor/Toolbar'
 import { Tooltip } from './editor/Tooltip'
 import { loadVisitors, useGallery } from './gallery/api'
@@ -141,6 +142,7 @@ export default function App() {
       </main>
       <Inspector />
       <EncodingDialog />
+      <ResolutionDialog />
       <Tooltip />
       {dragging && (
         <div className="drop-overlay">

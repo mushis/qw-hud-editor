@@ -135,7 +135,8 @@ export function clientIssues(s: ClientSettings, fromCfg: { width?: number; heigh
       cvar: w !== undefined ? 'vid_width' : 'vid_height',
       severity: 'warning',
       message: `The config sets ${set}. ${why}. The editor kept ${here}: pick your resolution at the top.`,
-      fix: { label: 'Dismiss', title: `Keep ${here} and hide this.`, settings: { cfgResolution: null } },
+      // 0 has to be answered in the resolution dialog; the other values can be left as they are.
+      ...(w === 0 || h === 0 ? {} : { fix: { label: 'Dismiss', title: `Keep ${here} and hide this.`, settings: { cfgResolution: null } } }),
     })
   }
   const r = ratio(s.width, s.height)

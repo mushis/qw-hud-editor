@@ -3,6 +3,7 @@ import { emptyDoc, lastValues, parseCfg, serializeCfg, type ClientSettings } fro
 import { EZQUAKE_DEFAULTS } from '../hud/defaults'
 import { groupPictures } from '../hud/pictures'
 import { unusableResolution } from '../hud/issues'
+import { useResolutionPrompt } from './resolutions'
 import { importTextures, type PathFile } from '../render/textures'
 import { useStore } from '../store'
 
@@ -52,6 +53,8 @@ export function importCfg(name: string, text: string): string {
     cfgResolution: bad ? { width: client.width, height: client.height } : null,
     ...(font !== undefined && { fontFacepath: font.trim() }),
   })
+  // 0 is the desktop resolution, which the editor can't know: the user is asked for theirs.
+  if (client.width === 0 || client.height === 0) useResolutionPrompt.setState({ open: true })
   const set = Object.entries(usable).map(([k, v]) => `${CLIENT_LABELS[k as keyof ClientSettings]} ${v}`)
   const notes = [
     `${count} of ${Object.keys(EZQUAKE_DEFAULTS).length} elements set${count < Object.keys(EZQUAKE_DEFAULTS).length ? ', the rest at their defaults' : ''}`,

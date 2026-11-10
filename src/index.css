@@ -1925,3 +1925,31 @@ input.switch:focus-visible {
   color: var(--accent);
   overflow-wrap: anywhere;
 }
+
+/* Which resolution the game is played at, for a cfg with vid_width / vid_height 0. */
+.resolution-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.resolution-picks button.active {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.resolution-picks button.active .dim {
+  color: inherit;
+}
+
+.resolution-typed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.resolution-typed input {
+  width: 80px;
+}

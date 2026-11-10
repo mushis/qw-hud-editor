@@ -106,7 +106,7 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
         </li>
       </ul>
 
-      <h3>Settings</h3>
+      <h3>Game settings</h3>
       <p className="dim">
         These change the whole HUD, not one element. Positions and sizes are in virtual pixels, not screen pixels, and these settings decide
         how many virtual pixels the screen has. Tick <i>export</i> to write them into the exported cfg as well.

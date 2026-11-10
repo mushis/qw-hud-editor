@@ -15,21 +15,9 @@ import { SetupDialog } from './SetupDialog'
 import { currentCfg, importCfg, loadEmptyHud } from './actions'
 import { readCfgFile } from './cfgFile'
 import { downloadText, fetchPreset, PRESETS } from './io'
+import { RESOLUTIONS } from './resolutions'
 import { tip } from './tip'
 
-const RESOLUTIONS: [number, number][] = [
-  [1920, 1080],
-  [2560, 1440],
-  [3840, 2160],
-  [1920, 1200],
-  [1680, 1050],
-  [1600, 900],
-  [1280, 720],
-  [1280, 1024],
-  [1024, 768],
-  [2560, 1080],
-  [3440, 1440],
-]
 const VIEWSIZES = [85, 90, 95, 99, 100, 110, 120]
 
 // In-game screenshots to place the HUD on.
@@ -166,7 +154,7 @@ export function Toolbar({ onMessage }: { onMessage: (m: string) => void }) {
       </div>
 
       <fieldset className="group client" {...tip(undefined, 'Game settings that change the whole HUD, not one element')}>
-        <legend>Settings</legend>
+        <legend>Game settings</legend>
         <select
           value={resolution}
           {...tip('vid_width, vid_height', 'Game resolution')}
