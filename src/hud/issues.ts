@@ -2,8 +2,8 @@
 // Only elements with show on are checked: a hidden element has no visible problem.
 
 import { ELEMENTS } from './catalog'
-import type { ClientSettings, HudDoc } from './cfg'
-import { ALIGN_X, ALIGN_Y, SCREEN_AREAS, shouldShow, wouldCycle, type Placed, type Screen } from './layout'
+import type { ClientSettings, HudDoc, Params } from './cfg'
+import { ALIGN_X, ALIGN_Y, raisedOrders, SCREEN_AREAS, shouldShow, wouldCycle, type Placed, type Screen } from './layout'
 import { findPicture, pictureName } from './pictures'
 
 export type Severity = 'error' | 'warning' | 'info'
@@ -13,6 +13,7 @@ export interface Issue {
   severity: Severity
   message: string
   params: string[] // the settings at fault, which Reset puts back to their defaults
+  resolve?: Record<string, Params> // what Resolve changes instead of a reset, element by element
 }
 
 export type Edge = 'left' | 'right' | 'top' | 'bottom'
@@ -99,6 +100,20 @@ export function findIssues(doc: HudDoc, placed: Map<string, Placed>, screen: Scr
       const { edges, hidden } = offscreen(box, screen)
       if (hidden) add('error', `Off-screen at ${box.outer.x}, ${box.outer.y}: not visible at ${screen.width}×${screen.height}.`, ['pos_x', 'pos_y'])
       else if (edges.length) add('warning', `Partly off-screen: cut off at the ${edges.join(' and ')} edge.`, ['pos_x', 'pos_y'])
+    }
+
+    // ezQuake draws an element over the one it is placed on, raising its order as soon as any order is set.
+    const raise = isElement ? raisedOrders(doc, name) : {}
+    if (raise[name]) {
+      const own = Math.trunc(parseFloat(p.order ?? '0') || 0)
+      const theirs = Math.trunc(parseFloat(doc.elements[parent].order ?? '0') || 0)
+      issues.push({
+        element: name,
+        severity: 'warning',
+        message: `order ${own} isn't above ${parent}'s (${theirs}): ezQuake raises it to ${raise[name].order}, as an element is always drawn over the one it is placed on.`,
+        params: ['order'],
+        resolve: raise,
+      })
     }
 
     if (name.startsWith('group') && pictureName(p.picture) && !findPicture(p.picture)) {

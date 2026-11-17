@@ -10,7 +10,8 @@ import { CHARSET, CROSSHAIR, isHudPicture, texturePriority, texturePurpose } fro
 import { builtinMask, builtinPixels, crosshairFromCvars } from '../render/crosshair'
 import { clientIssues, findIssues, unusableResolution } from './issues'
 import { checkEncoding } from './encoding'
-import { keepInPlace, placeTree, unanchored } from './layout'
+import { keepInPlace, placeTree, raisedOrders, unanchored } from './layout'
+import { useStore } from '../store'
 import { frameExtents, layoutHud, screenFor, shouldShow, viewRect, wouldCycle } from './layout'
 import { DEFAULT_PREVIEW } from './preview'
 
@@ -460,5 +461,37 @@ describe('which textures are loaded', () => {
     expect(texturePurpose('charset-big.png', false)).toBe(CHARSET)
     expect(texturePurpose('logo.png', false)).toBe('logo')
     expect(texturePurpose('conback.png', false)).toBeNull()
+  })
+})
+
+describe('order of placed elements', () => {
+  // Without the defaults: ezQuake's own put 33 elements on one with the same order (armor on face, gun3 on gun2…).
+  const doc = (elements: Record<string, Record<string, string>>) => ({ globals: {}, elements })
+
+  it('raises an element above the one it is placed on, and what is placed on it in turn', () => {
+    const d = doc({ face: { order: '5' }, armor: { place: 'face', order: '0' }, iarmor: { place: '@armor', order: '3' }, ping: { order: '9' } })
+    expect(raisedOrders(d)).toEqual({ armor: { order: '6' }, iarmor: { order: '7' } })
+    expect(raisedOrders(d, 'armor')).toEqual({ armor: { order: '6' }, iarmor: { order: '7' } })
+    expect(raisedOrders(d, 'iarmor')).toEqual({})
+  })
+
+  it('leaves elements already above their parent and placement loops alone', () => {
+    expect(raisedOrders(doc({ face: { order: '1' }, armor: { place: 'face', order: '4' } }))).toEqual({})
+    expect(raisedOrders(doc({ face: { place: 'armor', order: '0' }, armor: { place: 'face', order: '0' } }))).toEqual({})
+  })
+
+  it('lists one under its parent in Issues, with what Resolve changes', () => {
+    const d = withDefaults(doc({ face: { show: '1', order: '2' }, armor: { show: '1', place: 'face', order: '1' } }))
+    for (const [name, p] of Object.entries(d.elements)) if (name !== 'face' && name !== 'armor') p.show = '0'
+    const issue = findIssues(d, layoutHud(d, screen, sizer), screen).find((i) => i.params.includes('order'))
+    expect(issue).toMatchObject({ element: 'armor', severity: 'warning', resolve: { armor: { order: '3' } } })
+  })
+
+  it('raises it when it is placed on another element in the editor', () => {
+    useStore.getState().loadDoc(doc({ face: { order: '4' }, armor: { order: '0' } }))
+    useStore.getState().editParams('armor', { place: 'face' })
+    expect(useStore.getState().doc.elements.armor.order).toBe('5')
+    useStore.getState().undo()
+    expect(useStore.getState().doc.elements.armor.order).toBe('0')
   })
 })

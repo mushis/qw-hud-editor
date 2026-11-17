@@ -245,6 +245,38 @@ export function drawOrder(placed: Map<string, Placed>, registration: string[]): 
   return [...placed.values()].sort((a, b) => a.order - b.order || (index.get(a.name) ?? 0) - (index.get(b.name) ?? 0))
 }
 
+// HUD_ReorderChildren (hud.c): an element placed on another one is drawn over it, so ezQuake raises its order to
+// the parent's + 1 when it isn't higher (after the place command, any order change, or a drop in its HUD editor).
+// Raising one lifts the ones placed on it in turn. Returns the orders to change; elements in a placement loop are
+// left alone. With `from`, only that element and what is placed on it, directly or not.
+export function raisedOrders(doc: HudDoc, from?: string): Record<string, Params> {
+  const parentOf = (n: string) => parsePlace(doc.elements[n]?.place, n, doc).parent
+  const children = new Map<string, string[]>()
+  for (const n of Object.keys(doc.elements)) {
+    const p = parentOf(n)
+    if (p && !wouldCycle(doc, n, p)) children.set(p, [...(children.get(p) ?? []), n])
+  }
+  const out: Record<string, Params> = {}
+  const order = (n: string) => (out[n] ? Number(out[n].order) : Math.trunc(num(doc.elements[n]?.order)))
+  const raise = (child: string, parent: string) => {
+    if (order(child) <= order(parent)) out[child] = { order: String(order(parent) + 1) }
+  }
+  const visit = (n: string) => {
+    for (const c of children.get(n) ?? []) {
+      raise(c, n)
+      visit(c)
+    }
+  }
+  if (from) {
+    const p = parentOf(from)
+    if (p && !wouldCycle(doc, from, p)) raise(from, p)
+    visit(from)
+  } else {
+    for (const n of Object.keys(doc.elements)) if (!parentOf(n)) visit(n)
+  }
+  return out
+}
+
 // True if placing `child` on `parent` would create a loop.
 export function wouldCycle(doc: HudDoc, child: string, parent: string): boolean {
   let cur: string | null = parent

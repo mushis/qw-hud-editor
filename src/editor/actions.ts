@@ -1,6 +1,7 @@
 // Loading and saving whole HUDs. Every way in (import, presets, saved HUDs, drag and drop) goes through importCfg.
 import { emptyDoc, lastValues, parseCfg, serializeCfg, type ClientSettings } from '../hud/cfg'
 import { EZQUAKE_DEFAULTS } from '../hud/defaults'
+import { raisedOrders } from '../hud/layout'
 import { groupPictures } from '../hud/pictures'
 import { unusableResolution } from '../hud/issues'
 import { useResolutionPrompt } from './resolutions'
@@ -35,6 +36,12 @@ export function importCfg(name: string, text: string): string {
   if (!count) return `${name}: no HUD settings found.`
   const { loadDoc, setSettings } = useStore.getState()
   loadDoc(doc)
+  // A cfg that sets any order makes ezQuake raise every element over the one it is placed on (HUD_ReorderChildren
+  // runs on each order change); one that sets none leaves the orders as they are. Same undo step as the load.
+  const setsOrder = Object.values(doc.elements).some((p) => 'order' in p)
+  const orders = setsOrder ? raisedOrders(useStore.getState().doc) : {}
+  useStore.getState().setMany(orders)
+  const raised = Object.keys(orders)
   const font = lastValues(text).font_facepath
   // A vid_width / vid_height the editor can't show (0 = the desktop resolution) is left out, and listed in Issues.
   const bad = unusableResolution(client)
@@ -60,6 +67,8 @@ export function importCfg(name: string, text: string): string {
     `${count} of ${Object.keys(EZQUAKE_DEFAULTS).length} elements set${count < Object.keys(EZQUAKE_DEFAULTS).length ? ', the rest at their defaults' : ''}`,
     set.length > 0 && `client settings: ${set.join(', ')}`,
     bad && 'its vid_width / vid_height not used (see Issues)',
+    raised.length > 0 &&
+      `order raised for ${raised.length} ${raised.length === 1 ? 'element' : 'elements'} (${raised.slice(0, 3).join(', ')}${raised.length > 3 ? '…' : ''}) so each is drawn over the one it is placed on, as ezQuake does`,
     ignored > 0 && `${ignored} non-HUD lines ignored`,
     dropped.length > 0 && `${dropped.length} cvars ezQuake doesn't have dropped (${dropped.slice(0, 3).join(', ')}${dropped.length > 3 ? '…' : ''})`,
   ].filter(Boolean)

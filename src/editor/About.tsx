@@ -95,6 +95,11 @@ export function About({ onClose, admin: startAdmin = false }: { onClose: () => v
           elements also get a red marker on the screen edge.
         </li>
         <li>
+          An element placed on another one is always drawn over it: ezQuake raises its <code>order</code> above the other one's. The editor
+          does the same when you place an element on another, and when it loads a cfg that sets any <code>order</code>. An order you lower
+          below it shows in Issues, where <b>Resolve</b> raises it again.
+        </li>
+        <li>
           On the screen, hold <b>Ctrl</b> to drag the selected element's corners: that changes its scale (or width and height for groups and
           bars). Hold <b>Alt</b> while dragging an element placed on another one to move both, or one that others are placed on to move only
           it. Right-click for moves to an edge, unanchoring and reset. The bar under the screen shows what the mouse and keys do right now.

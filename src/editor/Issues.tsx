@@ -65,7 +65,26 @@ export function Issues() {
               </span>
               <span className="mono">{issue.element}</span>
               <span className="message">{issue.message}</span>
-              {Object.keys(defaultsFor(issue)).length > 0 ? (
+              {issue.resolve ? (
+                <button
+                  className="issue-reset"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    useStore.getState().editMany(issue.resolve!)
+                    select(issue.element)
+                  }}
+                  {...tip(
+                    Object.keys(issue.resolve)
+                      .map((n) => cvar(n, 'order'))
+                      .join(', '),
+                    `Set ${Object.entries(issue.resolve)
+                      .map(([n, v]) => `${n}'s order to ${v.order}`)
+                      .join(', ')}, as ezQuake would, so it is drawn over what it is placed on. You can undo this.`,
+                  )}
+                >
+                  Resolve
+                </button>
+              ) : Object.keys(defaultsFor(issue)).length > 0 ? (
                 <button
                   className="issue-reset"
                   onClick={(e) => {

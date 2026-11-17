@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ClientSettings, HudDoc } from './hud/cfg'
 import { emptyDoc } from './hud/cfg'
 import { withDefaults } from './hud/defaults'
+import { raisedOrders } from './hud/layout'
 import { DEFAULT_PREVIEW, type Preview } from './hud/preview'
 import { DEFAULT_CROSSHAIR, type Crosshair } from './render/crosshair'
 import type { ThemeId } from './themes'
@@ -118,10 +119,7 @@ export const useStore = create<State>((set, get) => ({
     set({ past: [...past.slice(-HISTORY_LIMIT + 1), doc], future: [] })
   },
   setParams(element, values) {
-    const { doc } = get()
-    set({
-      doc: { ...doc, elements: { ...doc.elements, [element]: { ...doc.elements[element], ...values } } },
-    })
+    get().setMany({ [element]: values })
   },
   editParams(element, values) {
     get().checkpoint()
@@ -131,7 +129,13 @@ export const useStore = create<State>((set, get) => ({
     const { doc } = get()
     const elements = { ...doc.elements }
     for (const [element, values] of Object.entries(changes)) elements[element] = { ...elements[element], ...values }
-    set({ doc: { ...doc, elements } })
+    let next = { ...doc, elements }
+    // A new place: like ezQuake's place command, every element ends up drawn over the one it is placed on.
+    if (Object.values(changes).some((values) => 'place' in values)) {
+      for (const [element, values] of Object.entries(raisedOrders(next))) elements[element] = { ...elements[element], ...values }
+      next = { ...doc, elements }
+    }
+    set({ doc: next })
   },
   editMany(changes) {
     get().checkpoint()
