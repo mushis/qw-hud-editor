@@ -1,5 +1,6 @@
 # QuakeWorld HUD Editor
-
+**https://mushis.github.io/qw-hud-editor/**
+Overview: https://youtu.be/8Q-vlpJ_uak
 Drag-and-drop editor for the ezQuake HUD (`scr_newhud 1`). Import your HUD cfg,
 move elements around on top of a game screenshot, export a cfg you can `exec`.
 
